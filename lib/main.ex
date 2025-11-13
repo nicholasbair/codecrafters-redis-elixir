@@ -4,6 +4,14 @@ defmodule Server do
   """
 
   use Application
+  require Logger
+
+  alias Server.{
+    Decoder,
+    Encoder,
+    Message,
+    Router
+  }
 
   def start(_type, _args) do
     children = [
@@ -29,16 +37,28 @@ defmodule Server do
 
   defp loop_acceptor(socket) do
     {:ok, client} = :gen_tcp.accept(socket)
-    {:ok, pid} = Task.Supervisor.start_child(Server.MessageSupervisor, fn -> handle_message(client) end)
+    {:ok, pid} = Task.Supervisor.start_child(Server.MessageSupervisor, fn -> handle_message_loop(client) end)
     :ok = :gen_tcp.controlling_process(client, pid)
 
     loop_acceptor(socket)
   end
 
-  defp handle_message(client) do
-    :gen_tcp.recv(client, 0)
-    :gen_tcp.send(client, "+PONG\r\n")
-    handle_message(client)
+  defp handle_message_loop(client) do
+    case :gen_tcp.recv(client, 0) do
+      {:ok, message} -> handle_message(message, client)
+      {:error, reason} -> Logger.error("TCP receive error: #{inspect(reason)}")
+    end
+
+    handle_message_loop(client)
+  end
+
+  defp handle_message(message, client) do
+    message
+    |> Message.new()
+    |> Decoder.decode()
+    |> Router.route()
+    |> Encoder.encode()
+    |> then(&:gen_tcp.send(client, &1))
   end
 end
 

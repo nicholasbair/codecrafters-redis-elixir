@@ -15,6 +15,7 @@ defmodule Server do
 
   def start(_type, _args) do
     children = [
+      {Server.Store, name: Server.Store},
       {Task.Supervisor, name: Server.MessageSupervisor},
       Supervisor.child_spec({Task, fn -> Server.listen() end}, restart: :permanent)
     ]
@@ -56,7 +57,7 @@ defmodule Server do
     message
     |> Message.new()
     |> Decoder.decode()
-    |> Router.route()
+    |> Router.dispatch()
     |> Encoder.encode()
     |> then(&:gen_tcp.send(client, &1))
   end

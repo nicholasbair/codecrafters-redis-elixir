@@ -1,12 +1,19 @@
 defmodule Server.Router do
 
   alias Server.{
+    CoreHandler,
     EchoHandler,
     PingHandler,
     Message
   }
 
-  @spec route(Message.t()) :: Message.t()
-  def route(%Message{command: "PING"} = message), do: PingHandler.ping(message)
-  def route(%Message{command: "ECHO"} = message), do: EchoHandler.echo(message)
+  @spec dispatch(Message.t()) :: Message.t()
+  def dispatch(%Message{} = message) do
+    case message.command do
+      "PING" -> PingHandler.ping(message)
+      "ECHO" -> EchoHandler.echo(message)
+      "SET" -> CoreHandler.set(message)
+      "GET" -> CoreHandler.get(message)
+    end
+  end
 end

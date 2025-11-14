@@ -28,7 +28,9 @@ defmodule Server.Decoder do
   @spec parse_chunk([String.t()]) :: String.t()
   defp parse_chunk([_type, val]), do: val
 
+  # %Server.Message{command: nil, raw: "*3\r\n$3\r\nSET\r\n$9\r\nraspberry\r\n$6\r\nbanana\r\n", reply: nil, value: nil}
   @spec into_message(tuple(), Message.t()) :: Message.t()
+  defp into_message({cmd, key, val}, message), do: %{message | command: cmd, value: {key, val}}
   defp into_message({cmd, val}, message), do: %{message | command: cmd, value: val}
   defp into_message({cmd}, message), do: %{message | command: cmd}
 end

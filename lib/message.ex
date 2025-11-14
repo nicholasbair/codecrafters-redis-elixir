@@ -3,8 +3,8 @@ defmodule Server.Message do
   @type t :: %__MODULE__{
     command: String.t() | nil,
     raw: String.t(),
-    reply: reply(),
-    value: String.t() | nil,
+    reply: reply() | nil,
+    value: String.t() | tuple() | nil,
   }
 
   @type reply :: {type :: :simple | :bulk, value :: String.t()}

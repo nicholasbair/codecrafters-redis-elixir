@@ -5,6 +5,8 @@ defmodule Server.CoreHandler do
     Store
   }
 
+  # TODO: protocol specifies the return type, need to implement that instead of hard coding here
+
   @spec set(Message.t()) :: Message.t()
   def set(%Message{} = message) do
     Store.transaction(message)

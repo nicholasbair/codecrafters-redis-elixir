@@ -131,7 +131,11 @@ defmodule Server.Store do
     Process.send_after(self(), :purge_expired, @purged_expired_interval)
   end
 
+  @spec maybe_slice_list(list(), integer(), integer()) :: list()
   defp maybe_slice_list([], _first, _last), do: []
-  defp maybe_slice_list(_list, first, last) when first > last, do: []
+  defp maybe_slice_list(_list, first, last) when first > last and last > 0, do: []
+  defp maybe_slice_list(list, first, last) when first > last do
+    Enum.slice(list, first..last//1)
+  end
   defp maybe_slice_list(list, first, last), do: Enum.slice(list, first..last)
 end

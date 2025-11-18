@@ -55,6 +55,16 @@ defmodule Server.Store do
     end
   end
 
+  def handle_call(%Message{command: "LLEN", key: k}, _from, state) do
+    val =
+      state
+      |> Map.get(k, %{})
+      |> Map.get(:value, [])
+      |> length()
+
+    {:reply, {:ok, val}, state}
+  end
+
   def handle_call(%Message{command: "LRANGE", key: k, value: [s, e]}, _from, state) do
     val =
       state

@@ -7,6 +7,12 @@ defmodule Server.CoreHandler do
 
   # TODO: protocol specifies the return type, need to implement that instead of hard coding here
 
+  @spec llen(Message.t()) :: Message.t()
+  def llen(%Message{} = message) do
+    {:ok, val} = Store.transaction(message)
+    %{message | reply: {:simple, val}}
+  end
+
   @spec lrange(Message.t()) :: Message.t()
   def lrange(%Message{} = message) do
     {:ok, val} = Store.transaction(message)

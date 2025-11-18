@@ -17,6 +17,7 @@ defmodule Server.Router do
       "RPUSH" -> CoreHandler.rpush(message)
       "LPUSH" -> CoreHandler.lpush(message)
       "LRANGE" -> CoreHandler.lrange(message)
+      "LLEN" -> CoreHandler.llen(message)
     end
   end
 end

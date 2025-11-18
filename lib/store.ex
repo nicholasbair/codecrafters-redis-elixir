@@ -48,9 +48,9 @@ defmodule Server.Store do
   def handle_call(%Message{command: "RPUSH", key: k, value: v}, _from, state) do
     case Map.get(state, k) do
       nil ->
-        {:reply, {:ok, 1}, Map.put(state, k, build_record([v]))}
+        {:reply, {:ok, length(v)}, Map.put(state, k, build_record(v))}
       %Record{value: val} ->
-        {:reply, {:ok, length(val) + 1}, Map.put(state, k, build_record(val ++ [v]))}
+        {:reply, {:ok, length(val) + length(v)}, Map.put(state, k, build_record(val ++ v))}
     end
   end
 

@@ -7,7 +7,7 @@ defmodule Server.Message do
     raw: String.t(),
     reply: reply() | nil,
     key: String.t() | nil,
-    value: String.t() | nil,
+    value: String.t() | list() | nil,
     options: Options.t() | nil
   }
 

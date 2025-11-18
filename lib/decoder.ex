@@ -42,8 +42,12 @@ defmodule Server.Decoder do
     into_message(tl, %{message | value: hd})
   end
 
-  defp into_message([hd | tl], %Message{command: cmd, value: nil} = message) when cmd in ["SET", "RPUSH"] do
+  defp into_message([hd | tl], %Message{command: "SET", value: nil} = message) do
     into_message(tl, %{message | value: hd})
+  end
+
+  defp into_message(rest, %Message{command: "RPUSH", value: nil} = message) do
+    into_message([], %{message | value: rest})
   end
 
   defp into_message(parts, %Message{options: nil} = message) when length(parts) > 0 do

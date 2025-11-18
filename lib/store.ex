@@ -54,6 +54,16 @@ defmodule Server.Store do
     end
   end
 
+  def handle_call(%Message{command: "LRANGE", key: k, value: [s, e]}, _from, state) do
+    val =
+      state
+      |> Map.get(k, %{})
+      |> Map.get(:value, [])
+      |> maybe_slice_list(s, e)
+
+    {:reply, {:ok, val}, state}
+  end
+
   def handle_call(%Message{command: "GET", key: k}, _from, state) do
     case get_value(state, k) do
       :expired ->
@@ -120,4 +130,8 @@ defmodule Server.Store do
   defp schedule_expiry_check() do
     Process.send_after(self(), :purge_expired, @purged_expired_interval)
   end
+
+  defp maybe_slice_list([], _first, _last), do: []
+  defp maybe_slice_list(_list, first, last) when first > last, do: []
+  defp maybe_slice_list(list, first, last), do: Enum.slice(list, first..last)
 end

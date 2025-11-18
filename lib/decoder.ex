@@ -34,7 +34,7 @@ defmodule Server.Decoder do
     into_message(tl, %{message | command: hd})
   end
 
-  defp into_message([hd | tl], %Message{command: cmd, key: nil} = message) when cmd in ["GET", "SET", "RPUSH"] do
+  defp into_message([hd | tl], %Message{command: cmd, key: nil} = message) when cmd in ["GET", "SET", "RPUSH", "LRANGE"] do
     into_message(tl, %{message | key: hd})
   end
 
@@ -48,6 +48,10 @@ defmodule Server.Decoder do
 
   defp into_message(rest, %Message{command: "RPUSH", value: nil} = message) do
     into_message([], %{message | value: rest})
+  end
+
+  defp into_message(rest, %Message{command: "LRANGE", value: nil} = message) do
+    into_message([], %{message | value: Enum.map(rest, &String.to_integer/1)})
   end
 
   defp into_message(parts, %Message{options: nil} = message) when length(parts) > 0 do

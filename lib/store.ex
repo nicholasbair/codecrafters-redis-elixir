@@ -56,13 +56,14 @@ defmodule Server.Store do
   end
 
   def handle_call(%Message{command: "LPOP", key: k}, _from, state) do
-    val =
-      state
-      |> Map.get(k, %{})
-      |> Map.get(:value, [])
-      |> maybe_get_first()
+    case record = Map.get(state, k, nil) do
+      %Record{value: val} ->
+        {val, rest} = List.pop_at(val, 0)
+        {:reply, {:ok, val}, Map.put(state, k, %{record | value: rest})}
 
-    {:reply, {:ok, val}, state}
+      nil ->
+        {:reply, {:ok, nil}, state}
+    end
   end
 
   def handle_call(%Message{command: "LLEN", key: k}, _from, state) do
@@ -163,8 +164,4 @@ defmodule Server.Store do
   @spec add_to_list(list(), list(), String.t()) :: list()
   defp add_to_list(existing, new, "RPUSH"), do: existing ++ new
   defp add_to_list(existing, new, "LPUSH"), do: new ++ existing
-
-  @spec maybe_get_first(list()) :: nil | String.t()
-  defp maybe_get_first([]), do: nil
-  defp maybe_get_first([hd | _tl]), do: hd
 end

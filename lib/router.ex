@@ -18,6 +18,7 @@ defmodule Server.Router do
       "LPUSH" -> CoreHandler.lpush(message)
       "LRANGE" -> CoreHandler.lrange(message)
       "LLEN" -> CoreHandler.llen(message)
+      "LPOP" -> CoreHandler.lpop(message)
     end
   end
 end

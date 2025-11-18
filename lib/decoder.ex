@@ -34,7 +34,7 @@ defmodule Server.Decoder do
     into_message(tl, %{message | command: hd})
   end
 
-  defp into_message([hd | tl], %Message{command: cmd, key: nil} = message) when cmd in ["GET", "SET", "RPUSH", "LPUSH", "LRANGE", "LLEN"] do
+  defp into_message([hd | tl], %Message{command: cmd, key: nil} = message) when cmd in ["GET", "SET", "RPUSH", "LPUSH", "LRANGE", "LLEN", "LPOP"] do
     into_message(tl, %{message | key: hd})
   end
 

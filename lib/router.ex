@@ -14,6 +14,7 @@ defmodule Server.Router do
       "ECHO" -> EchoHandler.echo(message)
       "SET" -> CoreHandler.set(message)
       "GET" -> CoreHandler.get(message)
+      "RPUSH" -> CoreHandler.rpush(message)
     end
   end
 end

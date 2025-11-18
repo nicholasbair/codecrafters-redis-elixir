@@ -11,7 +11,7 @@ defmodule Server.Store do
 
   defmodule Record do
     @type t :: %__MODULE__{
-      value: any() | nil,
+      value: String.t() | list() | nil,
       expire_at: integer() | nil
     }
 
@@ -45,11 +45,23 @@ defmodule Server.Store do
     {:reply, :ok, new_state}
   end
 
+  def handle_call(%Message{command: "RPUSH", key: k, value: v}, _from, state) do
+    case Map.get(state, k) do
+      nil ->
+        {:reply, {:ok, 1}, Map.put(state, k, build_record([v]))}
+      %Record{value: val} ->
+        {:reply, {:ok, length(val) + 1}, Map.put(state, k, build_record(val ++ [v]))}
+    end
+  end
+
   def handle_call(%Message{command: "GET", key: k}, _from, state) do
     case get_value(state, k) do
-      :expired -> {:reply, {:ok, nil}, Map.delete(state, k)}
-      nil -> {:reply, {:ok, nil}, state}
-      %Record{value: val} -> {:reply, {:ok, val}, state}
+      :expired ->
+        {:reply, {:ok, nil}, Map.delete(state, k)}
+      nil ->
+        {:reply, {:ok, nil}, state}
+      %Record{value: val} ->
+        {:reply, {:ok, val}, state}
     end
   end
 
@@ -71,7 +83,8 @@ defmodule Server.Store do
     {:noreply, updated_state}
   end
 
-  @spec build_record(any(), Options.t()) :: Record.t()
+  @spec build_record(any(), Options.t() | nil) :: Record.t()
+  defp build_record(value, opt \\ nil)
   defp build_record(value, nil), do: %Record{value: value}
 
   defp build_record(value, %{ttl_ms: ttl}) do

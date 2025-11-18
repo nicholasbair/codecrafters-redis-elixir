@@ -5,7 +5,8 @@ defmodule Server.Encoder do
   @crlf "\r\n"
 
   @spec encode(Message.t()) :: String.t()
-  def encode(%Message{reply: {:simple, val}}), do: "+#{val}#{@crlf}"
+  def encode(%Message{reply: {:simple, val}}) when is_bitstring(val), do: "+#{val}#{@crlf}"
+  def encode(%Message{reply: {:simple, val}}) when is_integer(val), do: ":#{val}#{@crlf}"
 
   def encode(%Message{reply: {:bulk, nil}}), do: "$-1" <> @crlf
 

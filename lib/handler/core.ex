@@ -19,6 +19,12 @@ defmodule Server.CoreHandler do
     %{message | reply: {:simple, val}}
   end
 
+  @spec lpush(Message.t()) :: Message.t()
+  def lpush(%Message{} = message) do
+    {:ok, val} = Store.transaction(message)
+    %{message | reply: {:simple, val}}
+  end
+
   @spec set(Message.t()) :: Message.t()
   def set(%Message{} = message) do
     Store.transaction(message)

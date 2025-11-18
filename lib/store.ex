@@ -45,12 +45,13 @@ defmodule Server.Store do
     {:reply, :ok, new_state}
   end
 
-  def handle_call(%Message{command: "RPUSH", key: k, value: v}, _from, state) do
+  def handle_call(%Message{command: cmd, key: k, value: v}, _from, state) when cmd in ["RPUSH", "LPUSH"] do
     case Map.get(state, k) do
       nil ->
         {:reply, {:ok, length(v)}, Map.put(state, k, build_record(v))}
       %Record{value: val} ->
-        {:reply, {:ok, length(val) + length(v)}, Map.put(state, k, build_record(val ++ v))}
+        updated = add_to_list(val, v, cmd)
+        {:reply, {:ok, length(val) + length(v)}, Map.put(state, k, build_record(updated))}
     end
   end
 
@@ -138,4 +139,8 @@ defmodule Server.Store do
     Enum.slice(list, first..last//1)
   end
   defp maybe_slice_list(list, first, last), do: Enum.slice(list, first..last)
+
+  @spec add_to_list(list(), list(), String.t()) :: list()
+  defp add_to_list(existing, new, "RPUSH"), do: existing ++ new
+  defp add_to_list(existing, new, "LPUSH"), do: new ++ existing
 end

@@ -1,7 +1,12 @@
 defmodule Server.PingHandler do
 
-  alias Server.Message
+  alias Server.{
+    Connection,
+    Response
+  }
 
-  @spec ping(Message.t()) :: Message.t()
-  def ping(%Message{} = message), do: %{message | reply: {:simple, "PONG"}}
+  @spec ping(Connection.t()) :: Connection.t()
+  def ping(%Connection{} = conn) do
+    %{conn | response: Response.new(:simple, "PONG")}
+  end
 end

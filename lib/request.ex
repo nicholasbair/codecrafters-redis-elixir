@@ -1,25 +1,21 @@
-defmodule Server.Message do
+defmodule Server.Request do
 
-  alias Server.Message.Options
+  alias Server.Request.Options
 
   @type t :: %__MODULE__{
     command: String.t() | nil,
-    raw: String.t(),
-    reply: reply() | nil,
     key: String.t() | nil,
     value: String.t() | list() | nil,
-    options: Options.t() | nil
+    options: Options.t() | nil,
+    raw: String.t()
   }
-
-  @type reply :: {type :: :simple | :bulk, value :: String.t()}
 
   defstruct [
     :command,
-    :raw,
-    :reply,
     :key,
     :value,
-    :options
+    :options,
+    :raw
   ]
 
   defmodule Options do

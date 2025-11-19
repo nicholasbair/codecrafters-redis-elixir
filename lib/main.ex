@@ -3,13 +3,16 @@ defmodule Server do
   Your implementation of a Redis server
   """
 
+  # TODO:
+  # 1. Consolidate handlers
+
   use Application
   require Logger
 
   alias Server.{
-    Decoder,
+    Connection,
     Encoder,
-    Message,
+    Parser,
     Router
   }
 
@@ -55,8 +58,8 @@ defmodule Server do
 
   defp handle_message(message, client) do
     message
-    |> Message.new()
-    |> Decoder.decode()
+    |> Connection.with_new_request()
+    |> Parser.parse()
     |> Router.dispatch()
     |> Encoder.encode()
     |> then(&:gen_tcp.send(client, &1))

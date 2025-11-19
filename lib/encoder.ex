@@ -1,20 +1,25 @@
 defmodule Server.Encoder do
 
-  alias Server.Message
+  alias Server.Connection
 
   @crlf "\r\n"
 
-  @spec encode(Message.t()) :: String.t()
-  def encode(%Message{reply: {:simple, val}}) when is_bitstring(val), do: "+#{val}#{@crlf}"
-  def encode(%Message{reply: {:simple, val}}) when is_integer(val), do: ":#{val}#{@crlf}"
+  @spec encode(Connection.t()) :: String.t()
+  def encode(%Connection{response: %{type: :simple, value: val}}) when is_bitstring(val) do
+    "+#{val}#{@crlf}"
+  end
 
-  def encode(%Message{reply: {:bulk, nil}}), do: "$-1" <> @crlf
+  def encode(%Connection{response: %{type: :simple, value: val}}) when is_integer(val) do
+    ":#{val}#{@crlf}"
+  end
 
-  def encode(%Message{reply: {:bulk, val}}) when is_bitstring(val) do
+  def encode(%Connection{response: %{type: :bulk, value: nil}}), do: "$-1" <> @crlf
+
+  def encode(%Connection{response: %{type: :bulk, value: val}}) when is_bitstring(val) do
     encode_item(val)
   end
 
-  def encode(%Message{reply: {:bulk, val}}) when is_list(val) do
+  def encode(%Connection{response: %{type: :bulk, value: val}}) when is_list(val) do
     "*#{length(val)}" <> @crlf <> encode_items(val)
   end
 

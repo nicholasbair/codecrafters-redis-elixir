@@ -1,24 +1,24 @@
 defmodule Server.Router do
 
   alias Server.{
+    Connection,
     CoreHandler,
     EchoHandler,
-    PingHandler,
-    Message
+    PingHandler
   }
 
-  @spec dispatch(Message.t()) :: Message.t()
-  def dispatch(%Message{} = message) do
-    case message.command do
-      "PING" -> PingHandler.ping(message)
-      "ECHO" -> EchoHandler.echo(message)
-      "SET" -> CoreHandler.set(message)
-      "GET" -> CoreHandler.get(message)
-      "RPUSH" -> CoreHandler.rpush(message)
-      "LPUSH" -> CoreHandler.lpush(message)
-      "LRANGE" -> CoreHandler.lrange(message)
-      "LLEN" -> CoreHandler.llen(message)
-      "LPOP" -> CoreHandler.lpop(message)
+  @spec dispatch(Connection.t()) :: Connection.t()
+  def dispatch(%Connection{} = conn) do
+    case conn.request.command do
+      "PING" -> PingHandler.ping(conn)
+      "ECHO" -> EchoHandler.echo(conn)
+      "SET" -> CoreHandler.set(conn)
+      "GET" -> CoreHandler.get(conn)
+      "RPUSH" -> CoreHandler.rpush(conn)
+      "LPUSH" -> CoreHandler.lpush(conn)
+      "LRANGE" -> CoreHandler.lrange(conn)
+      "LLEN" -> CoreHandler.llen(conn)
+      "LPOP" -> CoreHandler.lpop(conn)
     end
   end
 end

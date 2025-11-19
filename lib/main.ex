@@ -3,9 +3,6 @@ defmodule Server do
   Your implementation of a Redis server
   """
 
-  # TODO:
-  # 1. Consolidate handlers
-
   use Application
   require Logger
 

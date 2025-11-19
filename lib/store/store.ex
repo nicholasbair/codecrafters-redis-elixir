@@ -30,6 +30,7 @@ defmodule Server.Store do
     GenServer.start_link(__MODULE__, nil, name: __MODULE__)
   end
 
+  @spec transaction(Request.t()) :: :ok | {:ok, any()} | {:error, :unhandled_command}
   def transaction(%Request{} = req), do: GenServer.call(__MODULE__, req)
 
   # Server

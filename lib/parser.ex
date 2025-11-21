@@ -96,9 +96,17 @@ defmodule Server.Parser do
 
   @spec parse_timeout(list()) :: non_neg_integer() | :infinity
   defp parse_timeout([timeout]) do
-    case String.to_integer(timeout) do
+    case to_number(timeout) do
       0 -> :infinity
-      val -> val * 1000
+      val -> trunc(val * 1000)
+    end
+  end
+
+  @spec to_number(String.t()) :: integer() | float()
+  defp to_number(timeout) do
+    case String.match?(timeout, ~r/\./) do
+      true -> String.to_float(timeout)
+      false -> String.to_integer(timeout)
     end
   end
 

@@ -10,8 +10,8 @@ defmodule Server.Store do
     Util
   }
 
-  @purge_expired_keys_interval 30_000
-  @purge_expired_blocked_interval 10_000
+  @purge_expired_keys_interval 5_000
+  @purge_expired_blocked_interval 1_000
 
   defmodule State do
     @type t :: %__MODULE__{
@@ -160,7 +160,7 @@ defmodule Server.Store do
         %{acc | still_blocked: blocked, expired: acc.expired ++ expired}
       end)
 
-    for e <- expired, do: GenServer.reply(e.from, [nil, nil])
+    for e <- expired, do: GenServer.reply(e.from, {:ok, nil})
 
     schedule_blocked_expiry_check()
 
@@ -198,7 +198,7 @@ defmodule Server.Store do
       [] -> state
       blocked_list ->
         {expired, not_expired} = Enum.split_with(blocked_list, fn b -> expired?(b.expire_at) end)
-        for e <- expired, do: GenServer.reply(e.from, {:ok, [nil, nil]})
+        for e <- expired, do: GenServer.reply(e.from, {:ok, nil})
         find_and_reply(not_expired, req, state)
     end
   end

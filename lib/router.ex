@@ -29,6 +29,7 @@ defmodule Server.Router do
       "LRANGE" => %{handler: &default/1, reply_type: :bulk},
       "LLEN" => %{handler: &default/1, reply_type: :simple},
       "LPOP" => %{handler: &default/1, reply_type: :bulk},
+      "BLPOP" => %{handler: &default/1, reply_type: :bulk},
     }
     |> Map.fetch!(cmd)
   end
@@ -42,9 +43,9 @@ defmodule Server.Router do
   @spec echo(Request.t()) :: {:ok, String.t()}
   defp echo(%Request{} = req), do: {:ok, req.value}
 
-  @spec set(Request.t()) :: String.t()
+  @spec set(Request.t()) :: {:ok, String.t()}
   defp set(%Request{} = req) do
     :ok = Store.transaction(req)
-    "OK"
+    {:ok, "OK"}
   end
 end

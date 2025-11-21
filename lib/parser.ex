@@ -48,6 +48,7 @@ defmodule Server.Parser do
       "LRANGE" => &transform_lrange/2,
       "LLEN" => &transform_llen/2,
       "LPOP" => &transform_lpop/2,
+      "BLPOP" => &transform_blpop/2,
     }
     |> Map.get(cmd, &transform_default/2)
   end
@@ -86,6 +87,20 @@ defmodule Server.Parser do
   defp transform_lpop([key | tl], %{key: nil} = req), do: transform_lpop(tl, %{req | key: key})
   defp transform_lpop([value], req), do: %{req | value: String.to_integer(value)}
   defp transform_lpop([], req), do: req
+
+  @spec transform_blpop(list(), Request.t()) :: Request.t()
+  defp transform_blpop(parts, %{key: nil} = req) do
+    {keys, timeout} = Enum.split(parts, -1)
+    %{req | key: keys, options: %Options{timeout: parse_timeout(timeout)}}
+  end
+
+  @spec parse_timeout(list()) :: non_neg_integer() | :infinity
+  defp parse_timeout([timeout]) do
+    case String.to_integer(timeout) do
+      0 -> :infinity
+      val -> val * 1000
+    end
+  end
 
   @spec parse_options([String.t()], Options.t()) :: Options.t()
   defp parse_options(parts, acc \\ %Options{})

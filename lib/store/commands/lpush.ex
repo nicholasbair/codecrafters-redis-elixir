@@ -1,10 +1,13 @@
 defmodule Server.Store.Commands.Lpush do
 
   import Server.Store, only: [build_record: 1]
-  alias Server.Store.Record
+  alias Server.{
+    Request,
+    Store.Record,
+  }
 
-  @spec execute(String.t(), any(), map()) :: {non_neg_integer(), map()}
-  def execute(key, value, state) do
+  @spec execute(Request.t(), map()) :: {non_neg_integer(), map()}
+  def execute(%Request{key: key, value: value}, state) do
     case Map.get(state, key) do
       nil ->
         {length(value), Map.put(state, key, build_record(value))}

@@ -1,12 +1,15 @@
 defmodule Server.Store.Commands.Lpop do
 
-  alias Server.Store.Record
+  alias Server.{
+    Request,
+    Store.Record,
+  }
 
-  @spec execute(String.t(), integer() | nil, map()) :: {any(), map()}
-  def execute(key, nil, state), do: execute(key, 1, state)
+  @spec execute(Request.t(), map()) :: {any(), map()}
+  def execute(%Request{key: key, value: count}, state) do
+    # Lpop takes an optional number of items to remove from list
+    count = count || 1
 
-  # Lpop takes an optional number of items to remove from list
-  def execute(key, count, state) do
     case record = Map.get(state, key, nil) do
       %Record{value: value} ->
         {val, rest} = Enum.split(value, count)

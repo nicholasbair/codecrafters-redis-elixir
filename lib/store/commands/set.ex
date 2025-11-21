@@ -1,10 +1,23 @@
 defmodule Server.Store.Commands.Set do
 
-  alias Server.Request.Options
-  import Server.Store, only: [build_record: 2]
+  alias Server.{
+    Request,
+    Store.Record,
+  }
 
-  @spec execute(String.t(), any(), Options.t(), map()) :: map()
-  def execute(key, value, options, state) do
-    Map.put(state, key, build_record(value, options))
+  @spec execute(Request.t(), map()) :: map()
+  def execute(%Request{key: key, value: value} = req, state) do
+    Map.put(state, key, build_record(value, req))
+  end
+
+  @spec build_record(any(), Request.t()) :: Record.t()
+  defp build_record(value, %Request{options: nil}), do: %Record{value: value}
+
+  defp build_record(value, %Request{start_time: start, options: %{ttl_ms: ttl}}) do
+    %Record{value: value, expire_at: start + ttl}
+  end
+
+  defp build_record(value, %Request{options: %{expire_at_ms: time}}) do
+    %Record{value: value, expire_at: time}
   end
 end

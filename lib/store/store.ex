@@ -3,26 +3,52 @@ defmodule Server.Store do
   use GenServer
   alias Server.{
     Request,
-    Request.Options,
+    State,
+    Store.BlockedCaller,
     Store.Commands,
-    Store.Record
+    Store.Record,
+    Util
   }
 
-  @purged_expired_interval 30_000
+  @purge_expired_keys_interval 30_000
+  @purge_expired_blocked_interval 10_000
+
+  defmodule State do
+    @type t :: %__MODULE__{
+      records: record_state(),
+      blocked: blocked_state()
+    }
+
+    @type record_state :: %{String.t() => Record.t()}
+    @type blocked_state :: %{String.t() => [BlockedCaller.t()]}
+
+    defstruct [
+      blocked: %{},
+      records: %{}
+    ]
+  end
 
   defmodule Record do
     @type t :: %__MODULE__{
       value: String.t() | list() | nil,
-      expire_at: integer() | nil
+      expire_at: integer() | nil,
     }
 
-    defstruct [
-      :value,
-      :expire_at
-    ]
+    @enforce_keys [:value]
+    defstruct [:value, :expire_at]
   end
 
-  # TODO: handle other options, only expirations are implemented here
+  defmodule BlockedCaller do
+    @type t :: %__MODULE__{
+      from: from(),
+      expire_at: non_neg_integer() | :infinity
+    }
+
+    @type from() :: {pid(), tag :: term()}
+
+    @enforce_keys [:from, :expire_at]
+    defstruct [:from, :expire_at]
+  end
 
   # Client
 
@@ -31,96 +57,174 @@ defmodule Server.Store do
   end
 
   @spec transaction(Request.t()) :: :ok | {:ok, any()} | {:error, :unhandled_command}
+  # BLPOP is blocking, use infinity for the call and delegate actual timeout downstream
+  def transaction(%Request{command: "BLPOP"} = req), do: GenServer.call(__MODULE__, req, :infinity)
   def transaction(%Request{} = req), do: GenServer.call(__MODULE__, req)
 
   # Server
 
   def init(_) do
-    schedule_expiry_check()
-    {:ok, %{}}
+    schedule_key_expiry_check()
+    schedule_blocked_expiry_check()
+    {:ok, %State{}}
   end
 
-  def handle_call(%Request{command: "SET", key: k, value: v, options: opt}, _from, state) do
-    new_state = Commands.Set.execute(k, v, opt, state)
+  # TODO: handle other SET options, only expirations are implemented here
+  def handle_call(%Request{command: "SET"} = req, _from, state) do
+    new_state =
+      req
+      |> Commands.Set.execute(state.records)
+      |> then(fn records -> %{state | records: records} end)
+      |> handle_unblock(req)
+
     {:reply, :ok, new_state}
   end
 
-  def handle_call(%Request{command: "RPUSH", key: k, value: v}, _from, state) do
-    {n, new_state} = Commands.Rpush.execute(k, v, state)
+  def handle_call(%Request{command: "RPUSH"} = req, _from, state) do
+    {n, new_record_state} = Commands.Rpush.execute(req, state.records)
+    new_state = handle_unblock(%{state | records: new_record_state}, req)
+
     {:reply, {:ok, n}, new_state}
   end
 
-  def handle_call(%Request{command: "LPUSH", key: k, value: v}, _from, state) do
-    {n, new_state} = Commands.Lpush.execute(k, v, state)
+  def handle_call(%Request{command: "LPUSH"} = req, _from, state) do
+    {n, new_record_state} = Commands.Lpush.execute(req, state.records)
+    new_state = handle_unblock(%{state | records: new_record_state}, req)
+
     {:reply, {:ok, n}, new_state}
   end
 
-  def handle_call(%Request{command: "LPOP", key: k, value: v}, _from, state) do
-    {val, new_state} = Commands.Lpop.execute(k, v, state)
-    {:reply, {:ok, val}, new_state}
+  def handle_call(%Request{command: "LPOP"} = req, _from, state) do
+    {val, new_state} = Commands.Lpop.execute(req, state.records)
+    {:reply, {:ok, val}, %{state | records: new_state}}
   end
 
-  def handle_call(%Request{command: "LLEN", key: k}, _from, state) do
-    val = Commands.Llen.execute(k, state)
+  def handle_call(%Request{command: "BLPOP"} = req, from, state) do
+    case Commands.Blpop.execute(req, state.records) do
+      {:block, _state} ->
+        new_caller = [%BlockedCaller{from: from, expire_at: build_expiry(req.options.timeout)}]
+        new_blocked_state =
+          Enum.reduce(req.key, state.blocked, fn key, blocked_map ->
+            # BLPOP req.key is a list of keys
+            Map.update(blocked_map, key, new_caller, fn existing ->
+              existing ++ new_caller
+            end)
+          end)
+
+        {:noreply, %{state | blocked: new_blocked_state}}
+
+      {val, new_state} ->
+        {:reply, {:ok, val}, %{state | records: new_state}}
+    end
+  end
+
+  def handle_call(%Request{command: "LLEN"} = req, _from, state) do
+    val = Commands.Llen.execute(req, state.records)
     {:reply, {:ok, val}, state}
   end
 
-  def handle_call(%Request{command: "LRANGE", key: k, value: [s, e]}, _from, state) do
-    val = Commands.Lrange.execute(k, s, e, state)
+  def handle_call(%Request{command: "LRANGE"} = req, _from, state) do
+    val = Commands.Lrange.execute(req, state.records)
     {:reply, {:ok, val}, state}
   end
 
-  def handle_call(%Request{command: "GET", key: k}, _from, state) do
-    {val, new_state} = Commands.Get.execute(k, state)
-    {:reply, {:ok, val}, new_state}
+  def handle_call(%Request{command: "GET"} = req, _from, state) do
+    {val, new_state} = Commands.Get.execute(req, state.records)
+    {:reply, {:ok, val}, %{state | records: new_state}}
   end
 
   def handle_call(%Request{}, _from, state) do
     {:reply, {:error, :unhandled_command}, state}
   end
 
-  def handle_info(:purge_expired, state) do
-    updated_state =
-      Enum.reduce(state, %{}, fn {k, v}, acc ->
-        case check_expiry(v) do
-          %Record{} -> Map.put(acc, k, v)
-          _ -> acc
+  def handle_info(:purge_expired_keys, state) do
+    new_record_state =
+      Enum.reduce(state.records, %{}, fn {k, v}, acc ->
+        case expired?(v.expire_at) do
+          true -> acc
+          false -> Map.put(acc, k, v)
         end
       end)
 
-    schedule_expiry_check()
+    schedule_key_expiry_check()
 
-    {:noreply, updated_state}
+    {:noreply, %{state | records: new_record_state}}
   end
 
-  @spec build_record(any(), Options.t() | nil) :: Record.t()
-  def build_record(value, opt \\ nil)
-  def build_record(value, nil), do: %Record{value: value}
+  def handle_info(:purge_expired_blocked, state) do
+    %{still_blocked: new_blocked_state, expired: expired} =
+      Enum.reduce(state.blocked, %{still_blocked: %{}, expired: []}, fn {k, v}, acc ->
+        {expired, not_expired} = Enum.split_with(v, fn v -> expired?(v.expire_at) end)
+        blocked = Map.put(acc.still_blocked, k, not_expired)
 
-  def build_record(value, %{ttl_ms: ttl}) do
-    %Record{value: value, expire_at: now() + ttl}
+        %{acc | still_blocked: blocked, expired: acc.expired ++ expired}
+      end)
+
+    for e <- expired, do: GenServer.reply(e.from, [nil, nil])
+
+    schedule_blocked_expiry_check()
+
+    {:noreply, %{state | blocked: new_blocked_state}}
   end
 
-  def build_record(value, %{expire_at_ms: time}) do
-    %Record{value: value, expire_at: time}
+  @spec build_record(any()) :: Record.t()
+  def build_record(value), do: %Record{value: value}
+
+  @spec expired?(:infinity | non_neg_integer() | nil) :: boolean()
+  defp expired?(nil), do: false
+  defp expired?(:infinity), do: false
+  defp expired?(expiry), do: expiry < Util.now()
+
+  defp schedule_key_expiry_check() do
+    Process.send_after(
+      self(),
+      :purge_expired_keys,
+      @purge_expired_keys_interval
+    )
   end
 
-  def now() do
-    DateTime.utc_now()
-    |> DateTime.to_unix(:millisecond)
+  defp schedule_blocked_expiry_check() do
+    Process.send_after(
+      self(),
+      :purge_expired_blocked,
+      @purge_expired_blocked_interval
+    )
   end
 
-  @spec check_expiry(Record.t()) :: Record.t() | :expired | nil
-  def check_expiry(%Record{expire_at: nil} = record), do: record
-  def check_expiry(%Record{expire_at: expiry} = record) do
-    case expiry < now() do
-      true -> :expired
-      false -> record
+  @spec handle_unblock(State.t(), Request.t()) :: State.t()
+  defp handle_unblock(state, req) do
+    case Map.get(state.blocked, req.key) do
+      nil -> state
+      [] -> state
+      blocked_list ->
+        {expired, not_expired} = Enum.split_with(blocked_list, fn b -> expired?(b.expire_at) end)
+        for e <- expired, do: GenServer.reply(e.from, {:ok, [nil, nil]})
+        find_and_reply(not_expired, req, state)
     end
   end
-  def check_expiry(nil), do: nil
 
-  defp schedule_expiry_check() do
-    Process.send_after(self(), :purge_expired, @purged_expired_interval)
+  @spec find_and_reply([BlockedCaller.t()], Request.t(), State.t()) :: State.t()
+  defp find_and_reply([caller | tl] = blocked_list, req, state) do
+    req = %Request{key: req.key}
+    case Commands.Lpop.execute(req, state.records) do
+      {nil, _} ->
+        %{state | blocked: Map.put(state.blocked, req.key, blocked_list)}
+
+      {val, updated_state} ->
+        GenServer.reply(caller.from, {:ok, [req.key, val]})
+        %{state | records: updated_state, blocked: maybe_update_blocked(state.blocked, req.key, tl)}
+    end
   end
+
+  defp find_and_reply([] = _blocked_list, request, state) do
+    %{state | blocked: Map.delete(state.blocked, request.key)}
+  end
+
+  @spec maybe_update_blocked(map(), String.t(), list()) :: map()
+  defp maybe_update_blocked(blocked_state, key, []), do: Map.delete(blocked_state, key)
+  defp maybe_update_blocked(blocked_state, key, blocked), do: Map.put(blocked_state, key, blocked)
+
+  @spec build_expiry(:infinity | non_neg_integer()) :: non_neg_integer()
+  defp build_expiry(:infinity), do: :infinity
+  defp build_expiry(timeout), do: Util.now() + timeout
 end

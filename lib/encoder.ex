@@ -13,6 +13,8 @@ defmodule Server.Encoder do
     ":#{val}#{@crlf}"
   end
 
+  # TODO: BLPOP requires null array, ideally spec from router passes this
+  def encode(%Connection{request: %{command: "BLPOP"}, response: %{type: :bulk, value: nil}}), do: "*-1" <> @crlf
   def encode(%Connection{response: %{type: :bulk, value: nil}}), do: "$-1" <> @crlf
 
   def encode(%Connection{response: %{type: :bulk, value: val}}) when is_bitstring(val) do

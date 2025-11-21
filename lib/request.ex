@@ -1,13 +1,17 @@
 defmodule Server.Request do
 
-  alias Server.Request.Options
+  alias Server.{
+    Request.Options,
+    Util
+  }
 
   @type t :: %__MODULE__{
     command: String.t() | nil,
-    key: String.t() | nil,
+    key: String.t() | list() | nil,
     value: String.t() | list() | nil,
     options: Options.t() | nil,
-    raw: String.t()
+    raw: String.t() | nil,
+    start_time: non_neg_integer() | nil
   }
 
   defstruct [
@@ -15,7 +19,8 @@ defmodule Server.Request do
     :key,
     :value,
     :options,
-    :raw
+    :raw,
+    :start_time
   ]
 
   defmodule Options do
@@ -23,6 +28,7 @@ defmodule Server.Request do
       :ttl_ms,
       :expire_at_ms,
       :precondition,
+      :timeout,
       return_previous?: false,
       keep_ttl?: false,
       clear_ttl?: false
@@ -32,6 +38,7 @@ defmodule Server.Request do
       ttl_ms: integer() | nil,
       expire_at_ms: integer() | nil,
       precondition: :only_if_present | :only_if_absent | nil,
+      timeout: non_neg_integer() | :infinity | nil,
       return_previous?: boolean(),
       keep_ttl?: boolean(),
       clear_ttl?: boolean()
@@ -41,7 +48,8 @@ defmodule Server.Request do
   @spec new(String.t()) :: t()
   def new(raw) do
     %__MODULE__{
-      raw: raw
+      raw: raw,
+      start_time: Util.now()
     }
   end
 end

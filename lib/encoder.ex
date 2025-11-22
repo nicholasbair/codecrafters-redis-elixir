@@ -5,7 +5,11 @@ defmodule Server.Encoder do
   @crlf "\r\n"
 
   @spec encode(Connection.t()) :: String.t()
-  def encode(%Connection{response: %{type: :simple, value: val}}) when is_bitstring(val) do
+  def encode(%Connection{request: %{command: "TYPE"}, response: %{type: :simple, value: nil}}) do
+    "+none#{@crlf}"
+  end
+
+  def encode(%Connection{response: %{type: :simple, value: val}}) when is_bitstring(val) or is_atom(val) do
     "+#{val}#{@crlf}"
   end
 

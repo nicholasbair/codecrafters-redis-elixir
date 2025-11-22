@@ -1,6 +1,6 @@
 defmodule Server.Store.Commands.Lpush do
 
-  import Server.Store, only: [build_record: 1]
+  import Server.Store, only: [build_record: 2]
   alias Server.{
     Request,
     Store.Record,
@@ -10,10 +10,10 @@ defmodule Server.Store.Commands.Lpush do
   def execute(%Request{key: key, value: value}, state) do
     case Map.get(state, key) do
       nil ->
-        {length(value), Map.put(state, key, build_record(value))}
+        {length(value), Map.put(state, key, build_record(value, :list))}
       %Record{value: existing} ->
         updated = value ++ existing
-        {length(updated), Map.put(state, key, build_record(updated))}
+        {length(updated), Map.put(state, key, build_record(updated, :list))}
     end
   end
 end

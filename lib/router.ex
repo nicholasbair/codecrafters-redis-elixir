@@ -30,6 +30,7 @@ defmodule Server.Router do
       "LLEN" => %{handler: &default/1, reply_type: :simple},
       "LPOP" => %{handler: &default/1, reply_type: :bulk},
       "BLPOP" => %{handler: &default/1, reply_type: :bulk},
+      "TYPE" => %{handler: &default/1, reply_type: :simple},
     }
     |> Map.fetch!(cmd)
   end

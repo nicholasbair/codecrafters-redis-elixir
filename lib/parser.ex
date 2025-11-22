@@ -49,6 +49,7 @@ defmodule Server.Parser do
       "LLEN" => &transform_llen/2,
       "LPOP" => &transform_lpop/2,
       "BLPOP" => &transform_blpop/2,
+      "TYPE" => &transform_type/2,
     }
     |> Map.get(cmd, &transform_default/2)
   end
@@ -61,6 +62,9 @@ defmodule Server.Parser do
 
   @spec transform_get(list(), Request.t()) :: Request.t()
   defp transform_get([key | _], req), do: %{req | key: key}
+
+  @spec transform_type(list(), Request.t()) :: Request.t()
+  defp transform_type([key | _], req), do: %{req | key: key}
 
   @spec transform_set(list(), Request.t()) :: Request.t()
   defp transform_set([key | tl], %{key: nil} = req), do: transform_set(tl, %{req | key: key})

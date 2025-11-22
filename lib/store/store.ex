@@ -32,10 +32,13 @@ defmodule Server.Store do
     @type t :: %__MODULE__{
       value: String.t() | list() | nil,
       expire_at: integer() | nil,
+      type: record_type() | nil
     }
 
+    @type record_type :: :string | :list | :set | :zset | :hash | :stream | :vectorset
+
     @enforce_keys [:value]
-    defstruct [:value, :expire_at]
+    defstruct [:value, :expire_at, :type]
   end
 
   defmodule BlockedCaller do
@@ -133,6 +136,11 @@ defmodule Server.Store do
     {:reply, {:ok, val}, %{state | records: new_state}}
   end
 
+  def handle_call(%Request{command: "TYPE"} = req, _from, state) do
+    val = Commands.Type.execute(req, state.records)
+    {:reply, {:ok, val}, state}
+  end
+
   def handle_call(%Request{}, _from, state) do
     {:reply, {:error, :unhandled_command}, state}
   end
@@ -167,8 +175,8 @@ defmodule Server.Store do
     {:noreply, %{state | blocked: new_blocked_state}}
   end
 
-  @spec build_record(any()) :: Record.t()
-  def build_record(value), do: %Record{value: value}
+  @spec build_record(any(), atom()) :: Record.t()
+  def build_record(value, type), do: %Record{value: value, type: type}
 
   @spec expired?(:infinity | non_neg_integer() | nil) :: boolean()
   defp expired?(nil), do: false

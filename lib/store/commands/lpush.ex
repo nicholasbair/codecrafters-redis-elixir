@@ -4,9 +4,10 @@ defmodule Server.Store.Commands.Lpush do
   alias Server.{
     Request,
     Store.Record,
+    Store.State
   }
 
-  @spec execute(Request.t(), map()) :: {non_neg_integer(), map()}
+  @spec execute(Request.t(), State.record_state()) :: {non_neg_integer(), State.record_state()}
   def execute(%Request{key: key, value: value}, state) do
     case Map.get(state, key) do
       nil ->

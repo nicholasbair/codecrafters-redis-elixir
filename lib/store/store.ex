@@ -44,10 +44,11 @@ defmodule Server.Store do
   defmodule BlockedCaller do
     @type t :: %__MODULE__{
       from: from(),
-      expire_at: non_neg_integer() | :infinity
+      expire_at: expire_at()
     }
 
     @type from() :: {pid(), tag :: term()}
+    @type expire_at :: non_neg_integer() | :infinity
 
     @enforce_keys [:from, :expire_at]
     defstruct [:from, :expire_at]
@@ -141,6 +142,11 @@ defmodule Server.Store do
     {:reply, {:ok, val}, state}
   end
 
+  def handle_call(%Request{command: "XADD"} = req, _from, state) do
+    {entry_id, new_state} = Commands.Xadd.execute(req, state.records)
+    {:reply, {:ok, entry_id}, %{state | records: new_state}}
+  end
+
   def handle_call(%Request{}, _from, state) do
     {:reply, {:error, :unhandled_command}, state}
   end
@@ -178,8 +184,7 @@ defmodule Server.Store do
   @spec build_record(any(), atom()) :: Record.t()
   def build_record(value, type), do: %Record{value: value, type: type}
 
-  @spec expired?(:infinity | non_neg_integer() | nil) :: boolean()
-  defp expired?(nil), do: false
+  @spec expired?(BlockedCaller.expire_at()) :: boolean()
   defp expired?(:infinity), do: false
   defp expired?(expiry), do: expiry < Util.now()
 
@@ -228,11 +233,11 @@ defmodule Server.Store do
     %{state | blocked: Map.delete(state.blocked, request.key)}
   end
 
-  @spec maybe_update_blocked(map(), String.t(), list()) :: map()
+  @spec maybe_update_blocked(State.blocked_state(), String.t(), list()) :: State.blocked_state()
   defp maybe_update_blocked(blocked_state, key, []), do: Map.delete(blocked_state, key)
   defp maybe_update_blocked(blocked_state, key, blocked), do: Map.put(blocked_state, key, blocked)
 
-  @spec build_expiry(:infinity | non_neg_integer()) :: non_neg_integer()
+  @spec build_expiry(BlockedCaller.expire_at()) :: non_neg_integer()
   defp build_expiry(:infinity), do: :infinity
   defp build_expiry(timeout), do: Util.now() + timeout
 end

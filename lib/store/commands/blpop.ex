@@ -2,10 +2,11 @@ defmodule Server.Store.Commands.Blpop do
 
   alias Server.{
     Request,
+    Store.State,
     Store.Commands.Lpop,
   }
 
-  @spec execute(Request.t(), map()) :: {:block, map()} | {list(), map()}
+  @spec execute(Request.t(), State.record_state()) :: {:block, State.record_state()} | {list(), State.record_state()}
   def execute(%Request{key: keys} = req, state) do
     lpop_result =
       keys

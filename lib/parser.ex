@@ -50,6 +50,7 @@ defmodule Server.Parser do
       "LPOP" => &transform_lpop/2,
       "BLPOP" => &transform_blpop/2,
       "TYPE" => &transform_type/2,
+      "XADD" => &transform_xadd/2,
     }
     |> Map.get(cmd, &transform_default/2)
   end
@@ -97,6 +98,18 @@ defmodule Server.Parser do
     {keys, timeout} = Enum.split(parts, -1)
     %{req | key: keys, options: %Options{timeout: parse_timeout(timeout)}}
   end
+
+  @spec transform_xadd(list(), Request.t()) :: Request.t()
+  defp transform_xadd([key | tl], %{key: nil} = req), do: transform_xadd(tl, %{req | key: key})
+  defp transform_xadd([entry_id | tl], %{value: nil} = req) do
+    transform_xadd(tl, %{req | value: %{entry_id: entry_id}})
+  end
+
+  defp transform_xadd([key, value | tl], req) do
+    transform_xadd(tl, %{req | value: Map.put(req.value, key, value)})
+  end
+
+  defp transform_xadd([], req), do: req
 
   @spec parse_timeout(list()) :: non_neg_integer() | :infinity
   defp parse_timeout([timeout]) do

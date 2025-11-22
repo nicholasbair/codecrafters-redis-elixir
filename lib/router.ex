@@ -31,6 +31,7 @@ defmodule Server.Router do
       "LPOP" => %{handler: &default/1, reply_type: :bulk},
       "BLPOP" => %{handler: &default/1, reply_type: :bulk},
       "TYPE" => %{handler: &default/1, reply_type: :simple},
+      "XADD" => %{handler: &default/1, reply_type: :bulk},
     }
     |> Map.fetch!(cmd)
   end

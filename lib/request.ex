@@ -8,7 +8,7 @@ defmodule Server.Request do
   @type t :: %__MODULE__{
     command: String.t() | nil,
     key: String.t() | list() | nil,
-    value: String.t() | list() | nil,
+    value: String.t() | list() | map() | nil,
     options: Options.t() | nil,
     raw: String.t() | nil,
     start_time: non_neg_integer() | nil

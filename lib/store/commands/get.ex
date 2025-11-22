@@ -3,10 +3,11 @@ defmodule Server.Store.Commands.Get do
   alias Server.{
     Request,
     Store.Record,
+    Store.State,
     Util
   }
 
-  @spec execute(Request.t(), map()) :: {any(), map()}
+  @spec execute(Request.t(), State.record_state()) :: {any(), State.record_state()}
   def execute(%Request{key: key}, state) do
     case get_value(state, key) do
       :expired ->

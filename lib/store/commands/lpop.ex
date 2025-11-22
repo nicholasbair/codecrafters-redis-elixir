@@ -3,9 +3,10 @@ defmodule Server.Store.Commands.Lpop do
   alias Server.{
     Request,
     Store.Record,
+    Store.State
   }
 
-  @spec execute(Request.t(), map()) :: {any(), map()}
+  @spec execute(Request.t(), State.record_state()) :: {any(), State.record_state()}
   def execute(%Request{key: key, value: count}, state) do
     # Lpop takes an optional number of items to remove from list
     count = count || 1

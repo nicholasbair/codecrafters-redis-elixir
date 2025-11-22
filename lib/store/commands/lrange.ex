@@ -2,9 +2,11 @@ defmodule Server.Store.Commands.Lrange do
 
   alias Server.{
     Request,
+    Store.Record,
+    Store.State
   }
 
-  @spec execute(Request.t(), map()) :: list()
+  @spec execute(Request.t(), State.record_state()) :: [Record.t()]
   def execute(%Request{key: k, value: [from, to]}, state) do
     state
     |> Map.get(k, %{})

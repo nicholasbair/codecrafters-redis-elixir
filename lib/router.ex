@@ -10,7 +10,7 @@ defmodule Server.Router do
   @spec dispatch(Connection.t()) :: Connection.t()
   def dispatch(%Connection{} = conn) do
     spec = handlers(conn.request.command)
-    {:ok, result} = spec.handler.(conn.request)
+    result = spec.handler.(conn.request)
     %{conn | response: Response.new(spec.reply_type, result)}
   end
 
@@ -36,7 +36,7 @@ defmodule Server.Router do
     |> Map.fetch!(cmd)
   end
 
-  @spec default(Request.t()) :: {:ok, any()} | {:error, :unhandled_command}
+  @spec default(Request.t()) :: {:ok, any()} | {:error, String.t() | :unhandled_command}
   defp default(%Request{} = req), do: Store.transaction(req)
 
   @spec ping(Request.t()) :: {:ok, String.t()}

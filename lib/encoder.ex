@@ -5,27 +5,31 @@ defmodule Server.Encoder do
   @crlf "\r\n"
 
   @spec encode(Connection.t()) :: String.t()
-  def encode(%Connection{request: %{command: "TYPE"}, response: %{type: :simple, value: nil}}) do
+  def encode(%Connection{request: %{command: "TYPE"}, response: %{type: :simple, value: {:ok, nil}}}) do
     "+none#{@crlf}"
   end
 
-  def encode(%Connection{response: %{type: :simple, value: val}}) when is_bitstring(val) or is_atom(val) do
+  def encode(%Connection{response: %{value: {:error, msg}}}) when is_bitstring(msg) do
+    "-ERR #{msg}#{@crlf}"
+  end
+
+  def encode(%Connection{response: %{type: :simple, value: {:ok, val}}}) when is_bitstring(val) or is_atom(val) do
     "+#{val}#{@crlf}"
   end
 
-  def encode(%Connection{response: %{type: :simple, value: val}}) when is_integer(val) do
+  def encode(%Connection{response: %{type: :simple, value: {:ok, val}}}) when is_integer(val) do
     ":#{val}#{@crlf}"
   end
 
   # TODO: BLPOP requires null array, ideally spec from router passes this
-  def encode(%Connection{request: %{command: "BLPOP"}, response: %{type: :bulk, value: nil}}), do: "*-1" <> @crlf
-  def encode(%Connection{response: %{type: :bulk, value: nil}}), do: "$-1" <> @crlf
+  def encode(%Connection{request: %{command: "BLPOP"}, response: %{type: :bulk, value: {:ok, nil}}}), do: "*-1" <> @crlf
+  def encode(%Connection{response: %{type: :bulk, value: {:ok, nil}}}), do: "$-1" <> @crlf
 
-  def encode(%Connection{response: %{type: :bulk, value: val}}) when is_bitstring(val) do
+  def encode(%Connection{response: %{type: :bulk, value: {:ok, val}}}) when is_bitstring(val) do
     encode_item(val)
   end
 
-  def encode(%Connection{response: %{type: :bulk, value: val}}) when is_list(val) do
+  def encode(%Connection{response: %{type: :bulk, value: {:ok, val}}}) when is_list(val) do
     "*#{length(val)}" <> @crlf <> encode_items(val)
   end
 

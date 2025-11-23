@@ -60,7 +60,7 @@ defmodule Server.Store do
     GenServer.start_link(__MODULE__, nil, name: __MODULE__)
   end
 
-  @spec transaction(Request.t()) :: :ok | {:ok, any()} | {:error, :unhandled_command}
+  @spec transaction(Request.t()) :: :ok | {:ok, any()} | {:error, String.t() | atom()}
   # BLPOP is blocking, use infinity for the call and delegate actual timeout downstream
   def transaction(%Request{command: "BLPOP"} = req), do: GenServer.call(__MODULE__, req, :infinity)
   def transaction(%Request{} = req), do: GenServer.call(__MODULE__, req)
@@ -143,8 +143,12 @@ defmodule Server.Store do
   end
 
   def handle_call(%Request{command: "XADD"} = req, _from, state) do
-    {entry_id, new_state} = Commands.Xadd.execute(req, state.records)
-    {:reply, {:ok, entry_id}, %{state | records: new_state}}
+    case Commands.Xadd.execute(req, state.records) do
+      {:ok, entry_id, new_state} ->
+        {:reply, {:ok, entry_id}, %{state | records: new_state}}
+      {:error, err} ->
+        {:reply, {:error, err}, state}
+    end
   end
 
   def handle_call(%Request{}, _from, state) do

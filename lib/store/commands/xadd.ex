@@ -3,17 +3,18 @@ defmodule Server.Store.Commands.Xadd do
   alias Server.{
     Request,
     Store.Record,
-    Store.State
+    Store.State,
+    Util
   }
 
-  @type entry_id :: {non_neg_integer() | String.t(), non_neg_integer() | String.t()}
+  @type entry_id :: {non_neg_integer() | String.t(), non_neg_integer() | String.t()} | String.t()
 
   @spec execute(Request.t(), State.record_state()) :: {:ok, String.t(), State.record_state()} | {:error, String.t()}
   def execute(%Request{key: key, value: value}, state) do
     entry_id = parse_entry_id(value.entry_id)
     existing_record = Map.get(state, key)
 
-    case validate_entry_id(existing_record, entry_id) do
+    case validate_or_generate_entry_id(existing_record, entry_id) do
       {:ok, validated_id} ->
         new_value = %{value | entry_id: validated_id}
         updated_record = build_or_update_record(existing_record, new_value)
@@ -32,6 +33,7 @@ defmodule Server.Store.Commands.Xadd do
   end
 
   @spec parse_entry_id(String.t()) :: entry_id()
+  defp parse_entry_id("*"), do: "*"
   defp parse_entry_id(id) when is_bitstring(id) do
     id
     |> String.split("-")
@@ -41,18 +43,15 @@ defmodule Server.Store.Commands.Xadd do
   @spec entry_id_to_string(entry_id()) :: String.t()
   defp entry_id_to_string({a, b}), do: "#{a}-#{b}"
 
-  @spec validate_entry_id(Record.t() | nil, entry_id()) :: {:ok, entry_id()} | {:error, String.t()}
-  defp validate_entry_id(_previous, {0, 0}), do: {:error, "The ID specified in XADD must be greater than 0-0"}
+  @spec validate_or_generate_entry_id(Record.t() | nil, entry_id()) :: {:ok, entry_id()} | {:error, String.t()}
+  defp validate_or_generate_entry_id(_previous, {0, 0}), do: {:error, "The ID specified in XADD must be greater than 0-0"}
 
-  defp validate_entry_id(nil, {0, "*"}), do: {:ok, {0, 1}}
-  defp validate_entry_id(nil, {t, "*"}), do: {:ok, {t, 0}}
-  defp validate_entry_id(nil, new), do: {:ok, new}
-
-  defp validate_entry_id(%Record{value: []}, {0, "*"}), do: {:ok, {0, 1}}
-  defp validate_entry_id(%Record{value: []}, {t, "*"}), do: {:ok, {t, 0}}
-  defp validate_entry_id(%Record{value: []}, new), do: {:ok, new}
-
-  defp validate_entry_id(%Record{value: val}, {new_time, "*"}) do
+  # Auto-generate sequence number
+  defp validate_or_generate_entry_id(nil, {0, "*"}), do: {:ok, {0, 1}}
+  defp validate_or_generate_entry_id(nil, {t, "*"}), do: {:ok, {t, 0}}
+  defp validate_or_generate_entry_id(%Record{value: []}, {0, "*"}), do: {:ok, {0, 1}}
+  defp validate_or_generate_entry_id(%Record{value: []}, {t, "*"}), do: {:ok, {t, 0}}
+  defp validate_or_generate_entry_id(%Record{value: val}, {new_time, "*"}) do
     {prev_time, prev_sequence} =
       val
       |> List.last()
@@ -65,7 +64,27 @@ defmodule Server.Store.Commands.Xadd do
     end
   end
 
-  defp validate_entry_id(%Record{value: val}, {new_time, new_sequence} = new) do
+  # Auto-generate entire ID
+  defp validate_or_generate_entry_id(nil, "*"), do: {:ok, {Util.now, 0}}
+  defp validate_or_generate_entry_id(%Record{value: []}, "*"), do: {:ok, {Util.now, 0}}
+  defp validate_or_generate_entry_id(%Record{value: val}, "*") do
+    {prev_time, prev_sequence} =
+      val
+      |> List.last()
+      |> Map.get(:entry_id)
+
+    now = Util.now()
+
+    cond do
+      prev_time == now -> {:ok, {now, prev_sequence + 1}}
+      true -> {:ok, {now, 0}}
+    end
+  end
+
+  # Caller provided ID
+  defp validate_or_generate_entry_id(%Record{value: []}, new), do: {:ok, new}
+  defp validate_or_generate_entry_id(nil, new), do: {:ok, new}
+  defp validate_or_generate_entry_id(%Record{value: val}, {new_time, new_sequence} = new) do
     {prev_time, prev_sequence} =
       val
       |> List.last()

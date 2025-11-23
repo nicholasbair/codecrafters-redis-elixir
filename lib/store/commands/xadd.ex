@@ -6,7 +6,7 @@ defmodule Server.Store.Commands.Xadd do
     Store.State
   }
 
-  @type entry_id :: {non_neg_integer(), non_neg_integer()}
+  @type entry_id :: {non_neg_integer() | String.t(), non_neg_integer() | String.t()}
 
   @spec execute(Request.t(), State.record_state()) :: {:ok, String.t(), State.record_state()} | {:error, String.t()}
   def execute(%Request{key: key, value: value}, state) do
@@ -35,7 +35,7 @@ defmodule Server.Store.Commands.Xadd do
   defp parse_entry_id(id) when is_bitstring(id) do
     id
     |> String.split("-")
-    |> then(fn [t, s] -> {String.to_integer(t), String.to_integer(s)} end)
+    |> then(fn [t, s] -> {maybe_to_integer(t), maybe_to_integer(s)} end)
   end
 
   @spec entry_id_to_string(entry_id()) :: String.t()
@@ -43,8 +43,28 @@ defmodule Server.Store.Commands.Xadd do
 
   @spec validate_entry_id(Record.t() | nil, entry_id()) :: {:ok, entry_id()} | {:error, String.t()}
   defp validate_entry_id(_previous, {0, 0}), do: {:error, "The ID specified in XADD must be greater than 0-0"}
+
+  defp validate_entry_id(nil, {0, "*"}), do: {:ok, {0, 1}}
+  defp validate_entry_id(nil, {t, "*"}), do: {:ok, {t, 0}}
   defp validate_entry_id(nil, new), do: {:ok, new}
+
+  defp validate_entry_id(%Record{value: []}, {0, "*"}), do: {:ok, {0, 1}}
+  defp validate_entry_id(%Record{value: []}, {t, "*"}), do: {:ok, {t, 0}}
   defp validate_entry_id(%Record{value: []}, new), do: {:ok, new}
+
+  defp validate_entry_id(%Record{value: val}, {new_time, "*"}) do
+    {prev_time, prev_sequence} =
+      val
+      |> List.last()
+      |> Map.get(:entry_id)
+
+    cond do
+      prev_time < new_time -> {:ok, {new_time, 0}}
+      prev_time == new_time -> {:ok, {new_time, prev_sequence + 1}}
+      prev_time > new_time -> {:error, "The ID specified in XADD is equal or smaller than the target stream top item"}
+    end
+  end
+
   defp validate_entry_id(%Record{value: val}, {new_time, new_sequence} = new) do
     {prev_time, prev_sequence} =
       val
@@ -57,4 +77,8 @@ defmodule Server.Store.Commands.Xadd do
       true -> {:error, "The ID specified in XADD is equal or smaller than the target stream top item"}
     end
   end
+
+  @spec maybe_to_integer(String.t()) :: non_neg_integer() | String.t()
+  defp maybe_to_integer("*"), do: "*"
+  defp maybe_to_integer(val), do: String.to_integer(val)
 end

@@ -156,6 +156,11 @@ defmodule Server.Store do
     {:reply, {:ok, records}, state}
   end
 
+  def handle_call(%Request{command: "XREAD"} = req, _from, state) do
+    records = Commands.Xread.execute(req, state.records)
+    {:reply, {:ok, records}, state}
+  end
+
   def handle_call(%Request{}, _from, state) do
     {:reply, {:error, :unhandled_command}, state}
   end

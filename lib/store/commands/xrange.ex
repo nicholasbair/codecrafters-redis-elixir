@@ -5,7 +5,7 @@ defmodule Server.Store.Commands.Xrange do
     Store.State,
   }
 
-  @type entry_id :: {non_neg_integer(), non_neg_integer()} | non_neg_integer()
+  @type entry_id :: {non_neg_integer(), non_neg_integer()} | non_neg_integer() | String.t()
 
   @spec execute(Request.t(), State.record_state()) :: list()
   def execute(%Request{key: key, value: {s, e}}, state) do
@@ -20,6 +20,8 @@ defmodule Server.Store.Commands.Xrange do
   end
 
   @spec parse_entry_id(String.t()) :: entry_id()
+  defp parse_entry_id("-"), do: "-"
+  defp parse_entry_id("+"), do: "+"
   defp parse_entry_id(id) when is_bitstring(id) do
     id
     |> String.split("-")
@@ -32,12 +34,32 @@ defmodule Server.Store.Commands.Xrange do
   end
 
   @spec entry_match?(map(), entry_id(), entry_id()) :: boolean()
+  defp entry_match?(%{entry_id: {time, seq}}, "-", {end_time, end_seq}) do
+    time <= end_time and seq <= end_seq
+  end
+
+  defp entry_match?(%{entry_id: {time, _seq}}, "-", end_time) do
+    time <= end_time
+  end
+
+  defp entry_match?(%{entry_id: {time, seq}}, {start_time, start_seq}, "+") do
+    time >= start_time and seq >= start_seq
+  end
+
+  defp entry_match?(%{entry_id: {time, _seq}}, start_time, "+") do
+    time >= start_time
+  end
+
   defp entry_match?(%{entry_id: {time, seq}}, {start_time, start_seq}, {end_time, end_seq}) do
     time >= start_time and seq >= start_seq and time <= end_time and seq <= end_seq
   end
 
   defp entry_match?(%{entry_id: {time, seq}}, {start_time, start_seq}, end_time) do
     time >= start_time and seq >= start_seq and time <= end_time
+  end
+
+  defp entry_match?(%{entry_id: {time, seq}}, start_time, {end_time, end_seq}) do
+    time >= start_time and seq >= 0 and time <= end_time and seq <= end_seq
   end
 
   defp entry_match?(%{entry_id: {time, seq}}, start_time, end_time) do

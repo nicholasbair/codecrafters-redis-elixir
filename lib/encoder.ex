@@ -41,4 +41,9 @@ defmodule Server.Encoder do
   defp encode_item(item) when is_bitstring(item) do
     "$#{String.length(item)}" <> @crlf <> item <> @crlf
   end
+
+  # Ensure list of list is properly encoded
+  defp encode_item(item) when is_list(item) do
+    "*#{length(item)}" <> @crlf <> encode_items(item)
+  end
 end

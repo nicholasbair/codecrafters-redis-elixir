@@ -151,6 +151,11 @@ defmodule Server.Store do
     end
   end
 
+  def handle_call(%Request{command: "XRANGE"} = req, _from, state) do
+    records = Commands.Xrange.execute(req, state.records)
+    {:reply, {:ok, records}, state}
+  end
+
   def handle_call(%Request{}, _from, state) do
     {:reply, {:error, :unhandled_command}, state}
   end

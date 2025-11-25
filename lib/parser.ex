@@ -51,6 +51,7 @@ defmodule Server.Parser do
       "BLPOP" => &transform_blpop/2,
       "TYPE" => &transform_type/2,
       "XADD" => &transform_xadd/2,
+      "XRANGE" => &transform_xrange/2,
     }
     |> Map.get(cmd, &transform_default/2)
   end
@@ -110,6 +111,10 @@ defmodule Server.Parser do
   end
 
   defp transform_xadd([], req), do: req
+
+  @spec transform_xrange(list(), Request.t()) :: Request.t()
+  defp transform_xrange([key | tl], %{key: nil} = req), do: transform_xrange(tl, %{req | key: key})
+  defp transform_xrange([s, e | _tl], %{value: nil} = req), do: %{req | value: {s, e}}
 
   @spec parse_timeout(list()) :: non_neg_integer() | :infinity
   defp parse_timeout([timeout]) do

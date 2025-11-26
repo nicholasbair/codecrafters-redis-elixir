@@ -8,14 +8,21 @@ defmodule Server.Store.Commands.Xread do
   @type entry_id :: {non_neg_integer(), non_neg_integer()} | non_neg_integer()
 
   @spec execute(Request.t(), State.record_state()) :: list()
-  def execute(%Request{key: key, value: start}, state) do
-    start_time = parse_entry_id(start)
+  def execute(%Request{key: keys, value: ids}, state) do
+    keys
+    |> Enum.zip(ids)
+    |> Enum.map(&xread(&1, state))
+  end
+
+  @spec xread(tuple(), State.record_state()) :: list()
+  defp xread({key, id}, state) do
+    start_time = parse_entry_id(id)
 
     state
     |> Map.get(key, %{})
     |> Map.get(:value, [])
     |> Enum.filter(&entry_match?(&1, start_time))
-    |> Enum.reduce([], fn entry, acc -> acc ++ [[key, [format_entry(entry)]]] end)
+    |> Enum.reduce([], fn entry, acc -> acc ++ [key, [format_entry(entry)]] end)
   end
 
   @spec parse_entry_id(String.t()) :: entry_id()

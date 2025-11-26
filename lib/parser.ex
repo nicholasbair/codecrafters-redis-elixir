@@ -118,10 +118,12 @@ defmodule Server.Parser do
   defp transform_xrange([s, e | _tl], %{value: nil} = req), do: %{req | value: {s, e}}
 
   @spec transform_xread(list(), Request.t()) :: Request.t()
-  # Skip STREAMS value for now
   defp transform_xread([hd | tl], %{key: nil} = req) when hd in ["STREAMS", "streams"], do: transform_xread(tl, req)
-  defp transform_xread([key | tl], %{key: nil} = req), do: transform_xread(tl, %{req | key: key})
-  defp transform_xread([id | _tl], %{value: nil} = req), do: %{req | value: id}
+  defp transform_xread(parts, %{key: nil} = req) do
+    split_index = ceil(length(parts) / 2)
+    {keys, values} = Enum.split(parts, split_index)
+    %{req | key: keys, value: values}
+  end
 
   @spec parse_timeout(list()) :: non_neg_integer() | :infinity
   defp parse_timeout([timeout]) do

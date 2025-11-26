@@ -24,16 +24,6 @@ defmodule Server.Request do
   ]
 
   defmodule Options do
-    defstruct [
-      :ttl_ms,
-      :expire_at_ms,
-      :precondition,
-      :timeout,
-      return_previous?: false,
-      keep_ttl?: false,
-      clear_ttl?: false
-    ]
-
     @type t :: %__MODULE__{
       ttl_ms: integer() | nil,
       expire_at_ms: integer() | nil,
@@ -41,8 +31,20 @@ defmodule Server.Request do
       timeout: non_neg_integer() | :infinity | nil,
       return_previous?: boolean(),
       keep_ttl?: boolean(),
-      clear_ttl?: boolean()
+      clear_ttl?: boolean(),
+      block?: boolean()
     }
+
+    defstruct [
+      :ttl_ms,
+      :expire_at_ms,
+      :precondition,
+      :timeout,
+      return_previous?: false,
+      keep_ttl?: false,
+      clear_ttl?: false,
+      block?: false
+    ]
   end
 
   @spec new(String.t()) :: t()

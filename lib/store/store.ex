@@ -3,6 +3,7 @@ defmodule Server.Store do
   use GenServer
   alias Server.{
     Request,
+    Request.Options,
     State,
     Store.BlockedCaller,
     Store.Commands,
@@ -44,14 +45,15 @@ defmodule Server.Store do
   defmodule BlockedCaller do
     @type t :: %__MODULE__{
       from: from(),
-      expire_at: expire_at()
+      expire_at: expire_at(),
+      original_request: Request.t() | nil
     }
 
     @type from() :: {pid(), tag :: term()}
     @type expire_at :: non_neg_integer() | :infinity
 
     @enforce_keys [:from, :expire_at]
-    defstruct [:from, :expire_at]
+    defstruct [:from, :expire_at, :original_request]
   end
 
   # Client
@@ -79,21 +81,21 @@ defmodule Server.Store do
       req
       |> Commands.Set.execute(state.records)
       |> then(fn records -> %{state | records: records} end)
-      |> handle_unblock(req)
+      |> handle_unblock(req, "SET")
 
     {:reply, :ok, new_state}
   end
 
   def handle_call(%Request{command: "RPUSH"} = req, _from, state) do
     {n, new_record_state} = Commands.Rpush.execute(req, state.records)
-    new_state = handle_unblock(%{state | records: new_record_state}, req)
+    new_state = handle_unblock(%{state | records: new_record_state}, req, "RPUSH")
 
     {:reply, {:ok, n}, new_state}
   end
 
   def handle_call(%Request{command: "LPUSH"} = req, _from, state) do
     {n, new_record_state} = Commands.Lpush.execute(req, state.records)
-    new_state = handle_unblock(%{state | records: new_record_state}, req)
+    new_state = handle_unblock(%{state | records: new_record_state}, req, "LPUSH")
 
     {:reply, {:ok, n}, new_state}
   end
@@ -144,8 +146,9 @@ defmodule Server.Store do
 
   def handle_call(%Request{command: "XADD"} = req, _from, state) do
     case Commands.Xadd.execute(req, state.records) do
-      {:ok, entry_id, new_state} ->
-        {:reply, {:ok, entry_id}, %{state | records: new_state}}
+      {:ok, entry_id, new_record_state} ->
+        new_state = handle_unblock(%{state | records: new_record_state}, req, "XADD")
+        {:reply, {:ok, entry_id}, new_state}
       {:error, err} ->
         {:reply, {:error, err}, state}
     end
@@ -156,9 +159,29 @@ defmodule Server.Store do
     {:reply, {:ok, records}, state}
   end
 
-  def handle_call(%Request{command: "XREAD"} = req, _from, state) do
-    records = Commands.Xread.execute(req, state.records)
-    {:reply, {:ok, records}, state}
+  # TODO: need to add block check on XADD
+  def handle_call(%Request{command: "XREAD"} = req, from, state) do
+    case Commands.Xread.execute(req, state.records) do
+      {:ok, records} -> {:reply, {:ok, records}, state}
+      :block ->
+        new_caller = [
+          %BlockedCaller{
+            from: from,
+            expire_at: build_expiry(req.options.timeout),
+            original_request: req
+          }
+        ]
+
+        new_blocked_state =
+          Enum.reduce(req.key, state.blocked, fn key, blocked_map ->
+            # XREAD req.key is a list of keys
+            Map.update(blocked_map, key, new_caller, fn existing ->
+              existing ++ new_caller
+            end)
+          end)
+
+        {:noreply, %{state | blocked: new_blocked_state}}
+    end
   end
 
   def handle_call(%Request{}, _from, state) do
@@ -218,20 +241,21 @@ defmodule Server.Store do
     )
   end
 
-  @spec handle_unblock(State.t(), Request.t()) :: State.t()
-  defp handle_unblock(state, req) do
+  @spec handle_unblock(State.t(), Request.t(), String.t()) :: State.t()
+  defp handle_unblock(state, req, trigger) do
     case Map.get(state.blocked, req.key) do
       nil -> state
       [] -> state
       blocked_list ->
         {expired, not_expired} = Enum.split_with(blocked_list, fn b -> expired?(b.expire_at) end)
         for e <- expired, do: GenServer.reply(e.from, {:ok, nil})
-        find_and_reply(not_expired, req, state)
+        find_and_reply(not_expired, req, state, trigger)
     end
   end
 
-  @spec find_and_reply([BlockedCaller.t()], Request.t(), State.t()) :: State.t()
-  defp find_and_reply([caller | tl] = blocked_list, req, state) do
+  # TODO: this assumes only one actionable blocked caller
+  @spec find_and_reply([BlockedCaller.t()], Request.t(), State.t(), String.t()) :: State.t()
+  defp find_and_reply([caller | tl] = blocked_list, req, state, trigger) when trigger in ["SET", "RPUSH", "LPUSH"] do
     req = %Request{key: req.key}
     case Commands.Lpop.execute(req, state.records) do
       {nil, _} ->
@@ -243,7 +267,19 @@ defmodule Server.Store do
     end
   end
 
-  defp find_and_reply([] = _blocked_list, request, state) do
+  defp find_and_reply([caller | tl] = blocked_list, _req, state, "XADD") do
+    req = Map.delete(caller.original_request, :options)
+    case Commands.Xread.execute(req, state.records) do
+      {:ok, []} ->
+        %{state | blocked: Map.put(state.blocked, req.key, blocked_list)}
+
+      {:ok, results} ->
+        GenServer.reply(caller.from, {:ok, results})
+        %{state | blocked: maybe_update_blocked(state.blocked, req.key, tl)}
+    end
+  end
+
+  defp find_and_reply([] = _blocked_list, request, state, _trigger) do
     %{state | blocked: Map.delete(state.blocked, request.key)}
   end
 

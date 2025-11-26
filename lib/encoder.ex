@@ -21,8 +21,10 @@ defmodule Server.Encoder do
     ":#{val}#{@crlf}"
   end
 
-  # TODO: BLPOP requires null array, ideally spec from router passes this
-  def encode(%Connection{request: %{command: "BLPOP"}, response: %{type: :bulk, value: {:ok, nil}}}), do: "*-1" <> @crlf
+  # TODO: BLPOP, XREAD BLOCK requires null array, ideally spec from router passes this
+  def encode(%Connection{request: %{command: cmd}, response: %{type: :bulk, value: {:ok, nil}}}) when cmd in ["BLPOP", "XREAD"] do
+    "*-1" <> @crlf
+  end
   def encode(%Connection{response: %{type: :bulk, value: {:ok, nil}}}), do: "$-1" <> @crlf
 
   def encode(%Connection{response: %{type: :bulk, value: {:ok, val}}}) when is_bitstring(val) do

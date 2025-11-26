@@ -7,11 +7,26 @@ defmodule Server.Store.Commands.Xread do
 
   @type entry_id :: {non_neg_integer(), non_neg_integer()} | non_neg_integer()
 
-  @spec execute(Request.t(), State.record_state()) :: list()
+  @spec execute(Request.t(), State.record_state()) :: {:ok, list()} | :block
+  def execute(%Request{key: keys, value: ids, options: %{block?: true}}, state) do
+    results =
+      keys
+      |> Enum.zip(ids)
+      |> Enum.map(&xread(&1, state))
+      |> format_results()
+
+    case results do
+      [] -> :block
+      _ -> {:ok, results}
+    end
+  end
+
   def execute(%Request{key: keys, value: ids}, state) do
     keys
     |> Enum.zip(ids)
     |> Enum.map(&xread(&1, state))
+    |> format_results()
+    |> then(fn results -> {:ok, results} end)
   end
 
   @spec xread(tuple(), State.record_state()) :: list()
@@ -24,6 +39,10 @@ defmodule Server.Store.Commands.Xread do
     |> Enum.filter(&entry_match?(&1, start_time))
     |> Enum.reduce([], fn entry, acc -> acc ++ [key, [format_entry(entry)]] end)
   end
+
+  @spec format_results(list()) :: list()
+  defp format_results([[]]), do: []
+  defp format_results(results), do: results
 
   @spec parse_entry_id(String.t()) :: entry_id()
   defp parse_entry_id(id) when is_bitstring(id) do

@@ -98,7 +98,7 @@ defmodule Server.Parser do
   @spec transform_blpop(list(), Request.t()) :: Request.t()
   defp transform_blpop(parts, %{key: nil} = req) do
     {keys, timeout} = Enum.split(parts, -1)
-    %{req | key: keys, options: %Options{timeout: parse_timeout(timeout)}}
+    %{req | key: keys, options: %Options{timeout: parse_timeout_sec(timeout)}}
   end
 
   @spec transform_xadd(list(), Request.t()) :: Request.t()
@@ -118,6 +118,9 @@ defmodule Server.Parser do
   defp transform_xrange([s, e | _tl], %{value: nil} = req), do: %{req | value: {s, e}}
 
   @spec transform_xread(list(), Request.t()) :: Request.t()
+  defp transform_xread([block, timeout | tl], %{key: nil} = req) when block in ["BLOCK", "block"] do
+    transform_xread(tl, %{req | options: %Options{block?: true, timeout: parse_timeout_ms(timeout)}})
+  end
   defp transform_xread([hd | tl], %{key: nil} = req) when hd in ["STREAMS", "streams"], do: transform_xread(tl, req)
   defp transform_xread(parts, %{key: nil} = req) do
     split_index = ceil(length(parts) / 2)
@@ -125,8 +128,16 @@ defmodule Server.Parser do
     %{req | key: keys, value: values}
   end
 
-  @spec parse_timeout(list()) :: non_neg_integer() | :infinity
-  defp parse_timeout([timeout]) do
+  @spec parse_timeout_ms(String.t()) :: non_neg_integer() | :infinity
+  defp parse_timeout_ms(timeout) do
+    case to_number(timeout) do
+      0 -> :infinity
+      val -> val
+    end
+  end
+
+  @spec parse_timeout_sec(list()) :: non_neg_integer() | :infinity
+  defp parse_timeout_sec([timeout]) do
     case to_number(timeout) do
       0 -> :infinity
       val -> trunc(val * 1000)

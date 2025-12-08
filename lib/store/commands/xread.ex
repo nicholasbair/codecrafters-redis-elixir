@@ -6,8 +6,20 @@ defmodule Server.Store.Commands.Xread do
   }
 
   @type entry_id :: {non_neg_integer(), non_neg_integer()} | non_neg_integer()
+  @type block :: {:block, entry_id()} | :block
 
-  @spec execute(Request.t(), State.record_state()) :: {:ok, list()} | :block
+  @spec execute(Request.t(), State.record_state()) :: {:ok, list()} | block()
+  # TODO: assumes a single $, but can be a list of multiple $ or mixed
+  def execute(%Request{key: [key], value: ["$"], options: %{block?: true}}, state) do
+    last_id =
+      state
+      |> get_value(key)
+      |> List.last(%{})
+      |> Map.get(:entry_id, 0)
+
+    {:block, last_id}
+  end
+
   def execute(%Request{key: keys, value: ids, options: %{block?: true}}, state) do
     results =
       keys
@@ -34,17 +46,23 @@ defmodule Server.Store.Commands.Xread do
     start_time = parse_entry_id(id)
 
     state
-    |> Map.get(key, %{})
-    |> Map.get(:value, [])
+    |> get_value(key)
     |> Enum.filter(&entry_match?(&1, start_time))
     |> Enum.reduce([], fn entry, acc -> acc ++ [key, [format_entry(entry)]] end)
+  end
+
+  @spec get_value(State.record_state(), non_neg_integer()) :: list()
+  defp get_value(state, key) do
+    state
+    |> Map.get(key, %{})
+    |> Map.get(:value, [])
   end
 
   @spec format_results(list()) :: list()
   defp format_results([[]]), do: []
   defp format_results(results), do: results
 
-  @spec parse_entry_id(String.t()) :: entry_id()
+  @spec parse_entry_id(String.t() | integer() | tuple()) :: entry_id()
   defp parse_entry_id(id) when is_bitstring(id) do
     id
     |> String.split("-")
@@ -55,6 +73,9 @@ defmodule Server.Store.Commands.Xread do
       end
     end)
   end
+
+  defp parse_entry_id(id) when is_integer(id), do: {id, 0}
+  defp parse_entry_id({a, b} = id) when is_integer(a) and is_integer(b), do: id
 
   @spec entry_match?(map(), entry_id()) :: boolean()
   defp entry_match?(%{entry_id: {time, seq}}, {start_time, start_seq}) do

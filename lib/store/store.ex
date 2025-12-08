@@ -3,7 +3,6 @@ defmodule Server.Store do
   use GenServer
   alias Server.{
     Request,
-    Request.Options,
     State,
     Store.BlockedCaller,
     Store.Commands,
@@ -46,14 +45,15 @@ defmodule Server.Store do
     @type t :: %__MODULE__{
       from: from(),
       expire_at: expire_at(),
-      original_request: Request.t() | nil
+      original_request: Request.t(),
+      metadata: tuple() | nil
     }
 
     @type from() :: {pid(), tag :: term()}
     @type expire_at :: non_neg_integer() | :infinity
 
     @enforce_keys [:from, :expire_at]
-    defstruct [:from, :expire_at, :original_request]
+    defstruct [:from, :expire_at, :original_request, :metadata]
   end
 
   # Client
@@ -65,6 +65,7 @@ defmodule Server.Store do
   @spec transaction(Request.t()) :: :ok | {:ok, any()} | {:error, String.t() | atom()}
   # BLPOP is blocking, use infinity for the call and delegate actual timeout downstream
   def transaction(%Request{command: "BLPOP"} = req), do: GenServer.call(__MODULE__, req, :infinity)
+  def transaction(%Request{command: "XREAD", options: %{block?: true}} = req), do: GenServer.call(__MODULE__, req, :infinity)
   def transaction(%Request{} = req), do: GenServer.call(__MODULE__, req)
 
   # Server
@@ -159,10 +160,10 @@ defmodule Server.Store do
     {:reply, {:ok, records}, state}
   end
 
-  # TODO: need to add block check on XADD
   def handle_call(%Request{command: "XREAD"} = req, from, state) do
     case Commands.Xread.execute(req, state.records) do
       {:ok, records} -> {:reply, {:ok, records}, state}
+
       :block ->
         new_caller = [
           %BlockedCaller{
@@ -172,15 +173,20 @@ defmodule Server.Store do
           }
         ]
 
-        new_blocked_state =
-          Enum.reduce(req.key, state.blocked, fn key, blocked_map ->
-            # XREAD req.key is a list of keys
-            Map.update(blocked_map, key, new_caller, fn existing ->
-              existing ++ new_caller
-            end)
-          end)
+        {:noreply, %{state | blocked: new_blocked_state(req.key, state.blocked, new_caller)}}
 
-        {:noreply, %{state | blocked: new_blocked_state}}
+      # Block using $
+      {:block, metadata} ->
+        new_caller = [
+          %BlockedCaller{
+            from: from,
+            expire_at: build_expiry(req.options.timeout),
+            original_request: req,
+            metadata: {:block, metadata}
+          }
+        ]
+
+        {:noreply, %{state | blocked: new_blocked_state(req.key, state.blocked, new_caller)}}
     end
   end
 
@@ -216,6 +222,16 @@ defmodule Server.Store do
     schedule_blocked_expiry_check()
 
     {:noreply, %{state | blocked: new_blocked_state}}
+  end
+
+  @spec new_blocked_state(String.t(), map(), BlockedCaller.t()) :: map()
+  defp new_blocked_state(key, blocked, new_caller) do
+    Enum.reduce(key, blocked, fn key, blocked_map ->
+      # XREAD req.key is a list of keys
+      Map.update(blocked_map, key, new_caller, fn existing ->
+        existing ++ new_caller
+      end)
+    end)
   end
 
   @spec build_record(any(), atom()) :: Record.t()
@@ -268,7 +284,7 @@ defmodule Server.Store do
   end
 
   defp find_and_reply([caller | tl] = blocked_list, _req, state, "XADD") do
-    req = Map.delete(caller.original_request, :options)
+    req = reformat_xread_block_request(caller)
     case Commands.Xread.execute(req, state.records) do
       {:ok, []} ->
         %{state | blocked: Map.put(state.blocked, req.key, blocked_list)}
@@ -281,6 +297,20 @@ defmodule Server.Store do
 
   defp find_and_reply([] = _blocked_list, request, state, _trigger) do
     %{state | blocked: Map.delete(state.blocked, request.key)}
+  end
+
+  @spec reformat_xread_block_request(BlockedCaller.t()) :: Request.t()
+  defp reformat_xread_block_request(%BlockedCaller{metadata: {:block, id}, original_request: %Request{value: ["$"]} = original_req}) do
+    req = Map.delete(original_req, :options)
+    %{req | value: [id]}
+  end
+
+  defp reformat_xread_block_request(%BlockedCaller{original_request: %Request{value: ["$"]} = original_req}) do
+    Map.delete(original_req, :options)
+  end
+
+  defp reformat_xread_block_request(%BlockedCaller{original_request: original_req}) do
+    Map.delete(original_req, :options)
   end
 
   @spec maybe_update_blocked(State.blocked_state(), String.t(), list()) :: State.blocked_state()

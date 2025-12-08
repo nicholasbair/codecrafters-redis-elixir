@@ -53,6 +53,7 @@ defmodule Server.Parser do
       "XADD" => &transform_xadd/2,
       "XRANGE" => &transform_xrange/2,
       "XREAD" => &transform_xread/2,
+      "INCR" => &transform_incr/2,
     }
     |> Map.get(cmd, &transform_default/2)
   end
@@ -127,6 +128,9 @@ defmodule Server.Parser do
     {keys, values} = Enum.split(parts, split_index)
     %{req | key: keys, value: values}
   end
+
+  @spec transform_incr(list(), Request.t()) :: Request.t()
+  defp transform_incr([key], req), do: %{req | key: key}
 
   @spec parse_timeout_ms(String.t()) :: non_neg_integer() | :infinity
   defp parse_timeout_ms(timeout) do

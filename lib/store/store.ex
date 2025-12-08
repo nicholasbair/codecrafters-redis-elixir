@@ -35,7 +35,7 @@ defmodule Server.Store do
       type: record_type() | nil
     }
 
-    @type record_type :: :string | :list | :set | :zset | :hash | :stream | :vectorset
+    @type record_type :: :integer | :string | :list | :set | :zset | :hash | :stream | :vectorset
 
     @enforce_keys [:value]
     defstruct [:value, :expire_at, :type]
@@ -190,6 +190,11 @@ defmodule Server.Store do
     end
   end
 
+  def handle_call(%Request{command: "INCR"} = req, _from, state) do
+    {res, new_state} = Commands.Incr.execute(req, state.records)
+    {:reply, {:ok, res}, %{state | records: new_state}}
+  end
+
   def handle_call(%Request{}, _from, state) do
     {:reply, {:error, :unhandled_command}, state}
   end
@@ -224,14 +229,18 @@ defmodule Server.Store do
     {:noreply, %{state | blocked: new_blocked_state}}
   end
 
-  @spec new_blocked_state(String.t(), map(), BlockedCaller.t()) :: map()
-  defp new_blocked_state(key, blocked, new_caller) do
-    Enum.reduce(key, blocked, fn key, blocked_map ->
+  @spec new_blocked_state(String.t() | [String.t()], map(), [BlockedCaller.t()]) :: map()
+  defp new_blocked_state(keys, blocked, new_caller) when is_list(keys) do
+    Enum.reduce(keys, blocked, fn key, blocked_map ->
       # XREAD req.key is a list of keys
       Map.update(blocked_map, key, new_caller, fn existing ->
         existing ++ new_caller
       end)
     end)
+  end
+
+  defp new_blocked_state(key, blocked, new_caller) do
+    new_blocked_state([key], blocked, new_caller)
   end
 
   @spec build_record(any(), atom()) :: Record.t()

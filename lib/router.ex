@@ -34,6 +34,7 @@ defmodule Server.Router do
       "XADD" => %{handler: &default/1, reply_type: :bulk},
       "XRANGE" => %{handler: &default/1, reply_type: :bulk},
       "XREAD" => %{handler: &default/1, reply_type: :bulk},
+      "INCR" => %{handler: &default/1, reply_type: :simple},
     }
     |> Map.fetch!(cmd)
   end

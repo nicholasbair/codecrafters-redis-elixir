@@ -191,8 +191,12 @@ defmodule Server.Store do
   end
 
   def handle_call(%Request{command: "INCR"} = req, _from, state) do
-    {res, new_state} = Commands.Incr.execute(req, state.records)
-    {:reply, {:ok, res}, %{state | records: new_state}}
+    case Commands.Incr.execute(req, state.records) do
+      {:ok, res, new_state} ->
+        {:reply, {:ok, res}, %{state | records: new_state}}
+      {:error, msg, _} ->
+        {:reply, {:error, msg}, state}
+    end
   end
 
   def handle_call(%Request{}, _from, state) do

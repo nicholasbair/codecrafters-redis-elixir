@@ -35,7 +35,7 @@ defmodule Server.Store do
       type: record_type() | nil
     }
 
-    @type record_type :: :integer | :string | :list | :set | :zset | :hash | :stream | :vectorset
+    @type record_type :: :string | :list | :set | :zset | :hash | :stream | :vectorset
 
     @enforce_keys [:value]
     defstruct [:value, :expire_at, :type]

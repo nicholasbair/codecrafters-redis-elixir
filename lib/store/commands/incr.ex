@@ -11,14 +11,13 @@ defmodule Server.Store.Commands.Incr do
   def execute(%Request{key: key}, state) do
     case Map.get(state, key) do
       nil ->
-        {1, Map.put(state, key, Store.build_record(1, :integer))}
+        {1, Map.put(state, key, Store.build_record("1", :string))}
       %Record{value: existing} = record ->
-        updated = %{record | value: increment(existing)}
-        {updated.value, Map.put(state, key, updated)}
+        incremented = increment(existing)
+        {incremented, Map.put(state, key, %{record | value: to_string(incremented)})}
     end
   end
 
-  # SET initially stores the value as a string
   defp increment(val) when is_bitstring(val), do: String.to_integer(val) + 1
   defp increment(val) when is_integer(val), do: val + 1
 end

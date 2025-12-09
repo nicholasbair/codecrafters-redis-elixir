@@ -15,11 +15,15 @@ defmodule Server do
     Tcp
   }
 
+  @default_port 6379
+
   def start(_type, _args) do
+    opts = parse_cli_args()
+
     children = [
       {Server.Store, name: Server.Store},
       {Task.Supervisor, name: Server.MessageSupervisor},
-      Supervisor.child_spec({Task, fn -> Server.listen() end}, restart: :permanent)
+      Supervisor.child_spec({Task, fn -> Server.listen(opts) end}, restart: :permanent)
     ]
 
     Supervisor.start_link(children, strategy: :one_for_one)
@@ -28,13 +32,15 @@ defmodule Server do
   @doc """
   Listen for incoming connections
   """
-  def listen() do
+  def listen(opts \\ []) do
     # You can use print statements as follows for debugging, they'll be visible when running tests.
     IO.puts("Logs from your program will appear here!")
 
+    port = Keyword.get(opts, :port, @default_port)
+
     # Since the tester restarts your program quite often, setting SO_REUSEADDR
     # ensures that we don't run into 'Address already in use' errors
-    {:ok, socket} = :gen_tcp.listen(6379, [:binary, packet: :raw, active: false, reuseaddr: true])
+    {:ok, socket} = :gen_tcp.listen(port, [:binary, packet: :raw, active: false, reuseaddr: true])
     loop_acceptor(socket)
   end
 
@@ -75,6 +81,18 @@ defmodule Server do
 
   defp put_new_request(conn, message) do
     %{conn | request: Request.new(message)}
+  end
+
+  @spec parse_cli_args() :: Keyword.t()
+  defp parse_cli_args() do
+    System.argv()
+    |> Enum.chunk_every(2)
+    |> Enum.reduce(Keyword.new(), fn [k, v], acc ->
+      cond do
+        k == "--port" -> Keyword.put(acc, :port, String.to_integer(v))
+        true -> acc
+      end
+    end)
   end
 end
 

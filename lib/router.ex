@@ -8,7 +8,7 @@ defmodule Server.Router do
   }
 
   @spec dispatch(Conn.t()) :: Conn.t()
-  def dispatch(%Conn{multi?: true} = conn) do
+  def dispatch(%Conn{multi?: true, request: %{command: cmd}} = conn) when cmd not in ["EXEC"] do
     %{
       conn |
       queue: enqueue(conn.queue, conn.request),
@@ -31,6 +31,7 @@ defmodule Server.Router do
       "ECHO" => %{handler: &echo/1, reply_type: :bulk},
       "SET" => %{handler: &set/1, reply_type: :simple},
       "MULTI" => %{handler: &multi/1, reply_type: :simple},
+      "EXEC" => %{handler: &exec/1, reply_type: :bulk},
 
       # Default handler
       "GET" => %{handler: &default/1, reply_type: :bulk},
@@ -73,10 +74,37 @@ defmodule Server.Router do
     {updated_conn, {:ok, "OK"}}
   end
 
+  @spec exec(Conn.t()) :: {Conn.t(), {:ok, list()}}
+  defp exec(%Conn{multi?: false} = conn) do
+    {conn, {:error, "EXEC without MULTI"}}
+  end
+
+  defp exec(%Conn{} = conn) do
+    connections =
+      conn.queue
+      |> queue_to_list()
+      |> Enum.map(fn req ->
+        spec = handlers(req.command)
+        {_updated_conn, result} = spec.handler.(%Conn{request: req})
+
+        %Conn{
+          request: req,
+          response: Response.new(result, spec.reply_type)
+        }
+      end)
+
+    updated_conn = %{conn | multi?: false, queue: nil}
+    {updated_conn, {:ok, connections}}
+  end
+
   @spec enqueue(:queue.queue() | nil, Request.t()) :: :queue.queue()
   defp enqueue(nil, req) do
     q = :queue.new()
     :queue.in(req, q)
   end
   defp enqueue(queue, req), do: :queue.in(req, queue)
+
+  @spec queue_to_list(:queue.queue() | nil) :: list()
+  defp queue_to_list(nil), do: []
+  defp queue_to_list(q), do: :queue.to_list(q)
 end

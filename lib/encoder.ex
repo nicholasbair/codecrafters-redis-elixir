@@ -5,6 +5,15 @@ defmodule Server.Encoder do
   @crlf "\r\n"
 
   @spec encode(Conn.t()) :: Conn.t()
+  def encode(%Conn{request: %{command: "EXEC"}, response: %{value: {:ok, connections}}} = conn) do
+    raw_responses =
+      connections
+      |> Enum.map(&encode/1)
+      |> Enum.map(fn %{response: %{raw: raw}} -> raw end)
+
+    insert_raw_response(conn, "*#{length(raw_responses)}" <> @crlf <> Enum.join(raw_responses))
+  end
+
   def encode(%Conn{request: %{command: "TYPE"}, response: %{type: :simple, value: {:ok, nil}}} = conn) do
     insert_raw_response(conn, "+none#{@crlf}")
   end

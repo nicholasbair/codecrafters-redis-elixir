@@ -54,6 +54,7 @@ defmodule Server.Parser do
       "XRANGE" => &transform_xrange/2,
       "XREAD" => &transform_xread/2,
       "INCR" => &transform_incr/2,
+      "INFO" => &transform_info/2,
     }
     |> Map.get(cmd, &transform_default/2)
   end
@@ -131,6 +132,10 @@ defmodule Server.Parser do
 
   @spec transform_incr(list(), Request.t()) :: Request.t()
   defp transform_incr([key], req), do: %{req | key: key}
+
+  @spec transform_info(list(), Request.t()) :: Request.t()
+  defp transform_info([key], req), do: %{req | key: key}
+  defp transform_info([], req), do: req
 
   @spec parse_timeout_ms(String.t()) :: non_neg_integer() | :infinity
   defp parse_timeout_ms(timeout) do

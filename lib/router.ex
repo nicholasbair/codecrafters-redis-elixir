@@ -33,6 +33,7 @@ defmodule Server.Router do
       "MULTI" => %{handler: &multi/1, reply_type: :simple},
       "EXEC" => %{handler: &exec/1, reply_type: :bulk},
       "DISCARD" => %{handler: &discard/1, reply_type: :simple},
+      "INFO" => %{handler: &info/1, reply_type: :bulk},
 
       # Default handler
       "GET" => %{handler: &default/1, reply_type: :bulk},
@@ -106,6 +107,15 @@ defmodule Server.Router do
   defp discard(%Conn{} = conn) do
     updated_conn = %{conn | multi?: false, queue: nil}
     {updated_conn, {:ok, "OK"}}
+  end
+
+  @spec info(Conn.t()) :: {Conn.t(), {:ok, String.t()} | {:error, String.t()}}
+  def info(%Conn{request: %{key: "replication"}} = conn) do
+    {conn, {:ok, "role:master"}}
+  end
+
+  def info(%Conn{} = conn) do
+    {conn, {:error, "INFO option #{conn.request.key} not supported"}}
   end
 
   @spec enqueue(:queue.queue() | nil, Request.t()) :: :queue.queue()

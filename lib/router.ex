@@ -1,17 +1,26 @@
 defmodule Server.Router do
 
+  alias Server.Connection, as: Conn
   alias Server.{
-    Connection,
     Request,
     Response,
     Store
   }
 
-  @spec dispatch(Connection.t()) :: Connection.t()
-  def dispatch(%Connection{} = conn) do
+  @spec dispatch(Conn.t()) :: Conn.t()
+  def dispatch(%Conn{multi?: true} = conn) do
+    %{
+      conn |
+      queue: enqueue(conn.queue, conn.request),
+      response: Response.new({:ok, "QUEUED"}, :simple)
+    }
+  end
+
+  def dispatch(%Conn{} = conn) do
     spec = handlers(conn.request.command)
-    result = spec.handler.(conn.request)
-    %{conn | response: Response.new(spec.reply_type, result)}
+    {updated_conn, result} = spec.handler.(conn)
+
+    %{updated_conn | response: Response.new(result, spec.reply_type)}
   end
 
   @spec handlers(String.t()) :: map()
@@ -21,6 +30,7 @@ defmodule Server.Router do
       "PING" => %{handler: &ping/1, reply_type: :simple},
       "ECHO" => %{handler: &echo/1, reply_type: :bulk},
       "SET" => %{handler: &set/1, reply_type: :simple},
+      "MULTI" => %{handler: &multi/1, reply_type: :simple},
 
       # Default handler
       "GET" => %{handler: &default/1, reply_type: :bulk},
@@ -36,21 +46,37 @@ defmodule Server.Router do
       "XREAD" => %{handler: &default/1, reply_type: :bulk},
       "INCR" => %{handler: &default/1, reply_type: :simple},
     }
-    |> Map.fetch!(cmd)
+    |> Map.get(cmd, %{handler: &unhandled_command/1, reply_type: :simple})
   end
 
-  @spec default(Request.t()) :: {:ok, any()} | {:error, String.t() | :unhandled_command}
-  defp default(%Request{} = req), do: Store.transaction(req)
+  @spec unhandled_command(Conn.t()) :: {Conn.t(), {:error, String.t()}}
+  defp unhandled_command(conn), do: {conn, {:error, "unhandled command: #{conn.request.command}"}}
 
-  @spec ping(Request.t()) :: {:ok, String.t()}
-  defp ping(_req), do: {:ok, "PONG"}
+  @spec default(Conn.t()) :: {Conn.t(), {:ok, any()} | {:error, String.t() | :unhandled_command}}
+  defp default(%Conn{} = conn), do: {conn, Store.transaction(conn.request)}
 
-  @spec echo(Request.t()) :: {:ok, String.t()}
-  defp echo(%Request{} = req), do: {:ok, req.value}
+  @spec ping(Conn.t()) :: {Conn.t(), {:ok, String.t()}}
+  defp ping(conn), do: {conn, {:ok, "PONG"}}
 
-  @spec set(Request.t()) :: {:ok, String.t()}
-  defp set(%Request{} = req) do
-    :ok = Store.transaction(req)
-    {:ok, "OK"}
+  @spec echo(Conn.t()) :: {Conn.t(), {:ok, String.t()}}
+  defp echo(%Conn{} = conn), do: {conn, {:ok, conn.request.value}}
+
+  @spec set(Conn.t()) :: {Conn.t(), {:ok, String.t()}}
+  defp set(%Conn{} = conn) do
+    :ok = Store.transaction(conn.request)
+    {conn, {:ok, "OK"}}
   end
+
+  @spec multi(Conn.t()) :: {Conn.t(), {:ok, String.t()}}
+  defp multi(%Conn{} = conn) do
+    updated_conn = %{conn | multi?: true}
+    {updated_conn, {:ok, "OK"}}
+  end
+
+  @spec enqueue(:queue.queue() | nil, Request.t()) :: :queue.queue()
+  defp enqueue(nil, req) do
+    q = :queue.new()
+    :queue.in(req, q)
+  end
+  defp enqueue(queue, req), do: :queue.in(req, queue)
 end

@@ -7,18 +7,15 @@ defmodule Server.Connection do
 
   @type t :: %__MODULE__{
     request: Request.t(),
-    response: Response.t() | nil
+    response: Response.t() | nil,
+    multi?: boolean(),
+    queue: :queue.queue() | nil
   }
 
   defstruct [
+    :queue,
     :request,
-    :response
+    :response,
+    multi?: false
   ]
-
-  @spec with_new_request(String.t()) :: t()
-  def with_new_request(raw) do
-    %__MODULE__{
-      request: Request.new(raw)
-    }
-  end
 end

@@ -164,29 +164,25 @@ defmodule Server.Store do
     case Commands.Xread.execute(req, state.records) do
       {:ok, records} -> {:reply, {:ok, records}, state}
 
-      :block ->
-        new_caller = [
-          %BlockedCaller{
-            from: from,
-            expire_at: build_expiry(req.options.timeout),
-            original_request: req
-          }
-        ]
-
-        {:noreply, %{state | blocked: new_blocked_state(req.key, state.blocked, new_caller)}}
-
-      # Block using $
-      {:block, metadata} ->
+      blocking ->
         new_caller = [
           %BlockedCaller{
             from: from,
             expire_at: build_expiry(req.options.timeout),
             original_request: req,
-            metadata: {:block, metadata}
+            metadata: blocking
           }
         ]
 
-        {:noreply, %{state | blocked: new_blocked_state(req.key, state.blocked, new_caller)}}
+        new_blocked_state =
+          Enum.reduce(req.key, state.blocked, fn key, blocked_map ->
+            # XREAD req.key is a list of keys
+            Map.update(blocked_map, key, new_caller, fn existing ->
+              existing ++ new_caller
+            end)
+          end)
+
+        {:noreply, %{state | blocked: new_blocked_state}}
     end
   end
 
@@ -231,20 +227,6 @@ defmodule Server.Store do
     schedule_blocked_expiry_check()
 
     {:noreply, %{state | blocked: new_blocked_state}}
-  end
-
-  @spec new_blocked_state(String.t() | [String.t()], map(), [BlockedCaller.t()]) :: map()
-  defp new_blocked_state(keys, blocked, new_caller) when is_list(keys) do
-    Enum.reduce(keys, blocked, fn key, blocked_map ->
-      # XREAD req.key is a list of keys
-      Map.update(blocked_map, key, new_caller, fn existing ->
-        existing ++ new_caller
-      end)
-    end)
-  end
-
-  defp new_blocked_state(key, blocked, new_caller) do
-    new_blocked_state([key], blocked, new_caller)
   end
 
   @spec build_record(any(), atom()) :: Record.t()

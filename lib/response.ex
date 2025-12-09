@@ -1,19 +1,22 @@
 defmodule Server.Response do
 
   @type t :: %__MODULE__{
-    type: :simple | :bulk,
+    raw: String.t(),
+    type: response_type(),
     value: value()
   }
 
   @type value :: {:ok, nil | String.t() | integer() | list()} | {:error, String.t() | atom()}
+  @type response_type :: :simple | :bulk
 
   defstruct [
     :type,
-    :value
+    :value,
+    raw: "",
   ]
 
-  @spec new(:simple | :bulk, {:ok, value()} | {:error, String.t() | atom()}) :: t()
-  def new(type, value) do
+  @spec new(value(), response_type()) :: t()
+  def new(value, type) do
     %__MODULE__{
       type: type,
       value: value

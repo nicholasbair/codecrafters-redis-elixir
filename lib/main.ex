@@ -6,11 +6,13 @@ defmodule Server do
   use Application
   require Logger
 
+  alias Server.Connection, as: Conn
   alias Server.{
-    Connection,
     Encoder,
     Parser,
-    Router
+    Request,
+    Router,
+    Tcp
   }
 
   def start(_type, _args) do
@@ -44,22 +46,35 @@ defmodule Server do
     loop_acceptor(socket)
   end
 
-  defp handle_message_loop(client) do
-    case :gen_tcp.recv(client, 0) do
-      {:ok, message} -> handle_message(message, client)
-      {:error, reason} -> Logger.error("TCP receive error: #{inspect(reason)}")
-    end
+  defp handle_message_loop(client, conn \\ nil) do
+    # Preserve state for multi
+    base_conn = conn || %Conn{}
 
-    handle_message_loop(client)
+    case :gen_tcp.recv(client, 0) do
+      {:ok, message} ->
+        new_conn =
+          base_conn
+          |> put_new_request(message)
+          |> Parser.parse()
+          |> Router.dispatch()
+          |> Encoder.encode()
+          |> Tcp.send(client)
+
+        handle_message_loop(client, new_conn)
+
+      {:error, reason} ->
+        Logger.error("TCP receive error: #{inspect(reason)}")
+        handle_message_loop(client, nil)
+    end
   end
 
-  defp handle_message(message, client) do
-    message
-    |> Connection.with_new_request()
-    |> Parser.parse()
-    |> Router.dispatch()
-    |> Encoder.encode()
-    |> then(&:gen_tcp.send(client, &1))
+  @spec put_new_request(Conn.t() | nil, String.t()) :: Conn.t()
+  defp put_new_request(nil, message) do
+    %Conn{request: Request.new(message)}
+  end
+
+  defp put_new_request(conn, message) do
+    %{conn | request: Request.new(message)}
   end
 end
 

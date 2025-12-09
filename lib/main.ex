@@ -19,6 +19,7 @@ defmodule Server do
 
   def start(_type, _args) do
     opts = parse_cli_args()
+    set_app_info(opts)
 
     children = [
       {Server.Store, name: Server.Store},
@@ -88,11 +89,19 @@ defmodule Server do
     System.argv()
     |> Enum.chunk_every(2)
     |> Enum.reduce(Keyword.new(), fn [k, v], acc ->
-      cond do
-        k == "--port" -> Keyword.put(acc, :port, String.to_integer(v))
-        true -> acc
+      case k do
+        "--port" -> Keyword.put(acc, :port, String.to_integer(v))
+        "--replicaof" -> Keyword.put(acc, :role, "slave")
+        _ -> acc
       end
     end)
+  end
+
+  @spec set_app_info(Keyword.t()) :: [:ok]
+  defp set_app_info(opts) do
+    for {k, v} <- opts do
+      Application.put_env(__MODULE__, k, v)
+    end
   end
 end
 

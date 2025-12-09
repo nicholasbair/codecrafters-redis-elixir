@@ -8,7 +8,7 @@ defmodule Server.Router do
   }
 
   @spec dispatch(Conn.t()) :: Conn.t()
-  def dispatch(%Conn{multi?: true, request: %{command: cmd}} = conn) when cmd not in ["EXEC"] do
+  def dispatch(%Conn{multi?: true, request: %{command: cmd}} = conn) when cmd not in ["EXEC", "DISCARD"] do
     %{
       conn |
       queue: enqueue(conn.queue, conn.request),
@@ -32,6 +32,7 @@ defmodule Server.Router do
       "SET" => %{handler: &set/1, reply_type: :simple},
       "MULTI" => %{handler: &multi/1, reply_type: :simple},
       "EXEC" => %{handler: &exec/1, reply_type: :bulk},
+      "DISCARD" => %{handler: &discard/1, reply_type: :simple},
 
       # Default handler
       "GET" => %{handler: &default/1, reply_type: :bulk},
@@ -95,6 +96,16 @@ defmodule Server.Router do
 
     updated_conn = %{conn | multi?: false, queue: nil}
     {updated_conn, {:ok, connections}}
+  end
+
+  @spec discard(Conn.t()) :: {Conn.t(), {:ok, String.t()}}
+  defp discard(%Conn{multi?: false} = conn) do
+    {conn, {:error, "DISCARD without MULTI"}}
+  end
+
+  defp discard(%Conn{} = conn) do
+    updated_conn = %{conn | multi?: false, queue: nil}
+    {updated_conn, {:ok, "OK"}}
   end
 
   @spec enqueue(:queue.queue() | nil, Request.t()) :: :queue.queue()

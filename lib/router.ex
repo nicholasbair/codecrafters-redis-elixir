@@ -111,8 +111,13 @@ defmodule Server.Router do
 
   @spec info(Conn.t()) :: {Conn.t(), {:ok, String.t()} | {:error, String.t()}}
   def info(%Conn{request: %{key: "replication"}} = conn) do
-    role = Application.get_env(Server, :role, "master")
-    {conn, {:ok, "role:#{role}"}}
+    res = [
+      "role:#{Application.get_env(Server, :role, "master")}",
+      "master_replid:#{Application.get_env(Server, :master_replid)}",
+      "master_repl_offset:#{Application.get_env(Server, :master_repl_offset)}"
+    ]
+
+    {conn, {:ok, Enum.join(res, "\n")}}
   end
 
   def info(%Conn{} = conn) do

@@ -99,9 +99,11 @@ defmodule Server do
 
   @spec set_app_info(Keyword.t()) :: [:ok]
   defp set_app_info(opts) do
-    for {k, v} <- opts do
-      Application.put_env(__MODULE__, k, v)
-    end
+    for {k, v} <- opts, do: Application.put_env(__MODULE__, k, v)
+
+    # Hardcoding for now
+    Application.put_env(__MODULE__, :master_replid, "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb")
+    Application.put_env(__MODULE__, :master_repl_offset, 0)
   end
 end
 
